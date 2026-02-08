@@ -259,6 +259,21 @@ function DashboardSkeleton() {
   );
 }
 
+interface LiveStatusEntry {
+  status: string;
+  ipAddress: string;
+  port: string;
+  latency: string;
+  userAgent: string;
+  protocol: string;
+  activeChannels: string;
+  rawStatus: string;
+  serverId: string;
+  serverName: string;
+}
+
+type LiveStatusMap = Record<string, LiveStatusEntry>;
+
 export default function Dashboard() {
   const { data: servers, isLoading: loadingServers } = useQuery<ServerType[]>({
     queryKey: ["/api/servers"],
@@ -295,13 +310,45 @@ export default function Dashboard() {
     },
   });
 
+  const { data: liveStatus } = useQuery<LiveStatusMap>({
+    queryKey: ["/api/extensions/live-status"],
+    refetchInterval: 30000,
+  });
+
   const isLoading = loadingServers || loadingCompanies || loadingExtensions || loadingTrunks || loadingCalls || loadingConferenceRooms || loadingContacts;
 
   if (isLoading) return <DashboardSkeleton />;
 
   const activeServers = servers?.filter((s) => s.status === "online").length || 0;
   const amiServers = servers?.filter((s) => s.amiEnabled).length || 0;
-  const activeExtensions = extensions?.filter((e) => e.status === "active").length || 0;
+
+  const extensionLiveCounts = (() => {
+    let online = 0;
+    let busy = 0;
+    let unavailable = 0;
+    let offline = 0;
+    if (extensions && liveStatus) {
+      for (const ext of extensions) {
+        const key = `${ext.serverId}:${ext.number}`;
+        const live = liveStatus[key];
+        if (live) {
+          if (live.status === "active") online++;
+          else if (live.status === "busy") busy++;
+          else if (live.status === "unavailable") unavailable++;
+          else offline++;
+        } else {
+          offline++;
+        }
+      }
+    } else if (extensions) {
+      for (const ext of extensions) {
+        if (ext.status === "active") online++;
+        else offline++;
+      }
+    }
+    return { online, busy, unavailable, offline, total: extensions?.length || 0 };
+  })();
+
   const registeredTrunks = trunks?.filter((t) => t.status === "registered").length || 0;
   const activeQueues = queuesList?.filter((q) => q.active).length || 0;
   const activeConferenceRooms = conferenceRooms?.filter((c) => c.active).length || 0;
@@ -313,6 +360,7 @@ export default function Dashboard() {
     queryClient.invalidateQueries({ queryKey: ["/api/servers"] });
     queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
     queryClient.invalidateQueries({ queryKey: ["/api/extensions"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/extensions/live-status"] });
     queryClient.invalidateQueries({ queryKey: ["/api/sip-trunks"] });
     queryClient.invalidateQueries({ queryKey: ["/api/call-logs"] });
     queryClient.invalidateQueries({ queryKey: ["/api/queues"] });
@@ -360,9 +408,9 @@ export default function Dashboard() {
         />
         <StatCard
           title="Ramais"
-          value={activeExtensions}
+          value={extensionLiveCounts.online}
           icon={Phone}
-          description={`${extensions?.length || 0} total`}
+          description={`${extensionLiveCounts.total} total | ${extensionLiveCounts.busy} em chamada`}
           testId="stat-extensions"
         />
         <StatCard

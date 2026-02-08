@@ -162,7 +162,17 @@ export default function MusicOnHold() {
     setPlayingFile(null);
   };
 
+  const isSuperAdmin = user?.role === "super_admin";
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+
+  const canDeleteFile = (file: MohFile): boolean => {
+    const isDefaultFile = file.mohClass === "default" || file.mohClass === "Default" ||
+      (!file.filePath.includes("/custom/") && !file.filePath.includes("/uploaded/"));
+    if (isDefaultFile) {
+      return isSuperAdmin;
+    }
+    return isAdmin;
+  };
 
   if (!servers) {
     return (
@@ -367,7 +377,7 @@ export default function MusicOnHold() {
                             >
                               <Download className="w-4 h-4" />
                             </Button>
-                            {isAdmin && (
+                            {canDeleteFile(file) && (
                               <Button
                                 variant="ghost"
                                 size="icon"

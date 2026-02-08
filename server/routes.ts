@@ -2256,6 +2256,20 @@ export async function registerRoutes(
         const filePath = req.query.file as string;
         if (!filePath) return res.status(400).json({ message: "Parâmetro 'file' é obrigatório" });
         const sanitized = filePath.replace(/[;&|`$]/g, "");
+
+        const isDefaultClass = sanitized.includes("/moh/") &&
+          !sanitized.includes("/moh/custom") &&
+          !sanitized.includes("/moh/uploaded");
+        const defaultDirs = ["/var/lib/asterisk/moh", "/usr/share/asterisk/moh"];
+        const isInDefaultDir = defaultDirs.some(d => {
+          const relPath = sanitized.replace(d, "").replace(/^\//, "");
+          return sanitized.startsWith(d) && !relPath.includes("/");
+        });
+
+        if ((isDefaultClass || isInDefaultDir) && (req as any).user?.role !== "super_admin") {
+          return res.status(403).json({ message: "Apenas super_admin pode excluir músicas padrão do sistema" });
+        }
+
         await execSSHCommand(client, `rm -f "${sanitized}"`);
         await execSSHCommand(client, "asterisk -rx 'moh reload' 2>/dev/null || true");
         res.json({ success: true, message: "Arquivo MoH excluído" });
