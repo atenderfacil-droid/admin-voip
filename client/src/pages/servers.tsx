@@ -276,21 +276,20 @@ function AMIConnectionStatus({ server }: { server: ServerType }) {
 
   const isLoading = testMutation.isPending || connectMutation.isPending;
 
-  if (!server.amiEnabled) {
-    return (
-      <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/50">
-        <Unplug className="w-4 h-4 text-muted-foreground" />
-        <span className="text-xs text-muted-foreground">AMI desabilitado</span>
-      </div>
-    );
-  }
+  const handleAmiDisabled = () => {
+    toast({
+      title: "AMI não habilitado",
+      description: "Edite o servidor e habilite o AMI com as credenciais para poder testar ou conectar.",
+      variant: "destructive",
+    });
+  };
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <Button
         variant="outline"
         size="sm"
-        onClick={() => testMutation.mutate()}
+        onClick={() => server.amiEnabled ? testMutation.mutate() : handleAmiDisabled()}
         disabled={isLoading}
         data-testid={`button-test-connection-${server.id}`}
       >
@@ -303,7 +302,7 @@ function AMIConnectionStatus({ server }: { server: ServerType }) {
       </Button>
       <Button
         size="sm"
-        onClick={() => connectMutation.mutate()}
+        onClick={() => server.amiEnabled ? connectMutation.mutate() : handleAmiDisabled()}
         disabled={isLoading}
         data-testid={`button-connect-server-${server.id}`}
       >
