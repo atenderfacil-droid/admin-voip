@@ -12,12 +12,14 @@ import {
   ArrowUpRight,
   Plug,
   Users,
+  Podcast,
+  BookUser,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import type { Server as ServerType, Company, Extension, SipTrunk, CallLog, Queue } from "@shared/schema";
+import type { Server as ServerType, Company, Extension, SipTrunk, CallLog, Queue, ConferenceRoom, Contact } from "@shared/schema";
 
 function StatCard({
   title,
@@ -234,6 +236,17 @@ function DashboardSkeleton() {
           </Card>
         ))}
       </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[1, 2, 3].map((i) => (
+          <Card key={`row2-${i}`}>
+            <CardContent className="p-5">
+              <Skeleton className="h-4 w-20 mb-2" />
+              <Skeleton className="h-8 w-16 mb-1" />
+              <Skeleton className="h-3 w-24" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Skeleton className="h-64" />
         <Skeleton className="h-64" />
@@ -263,8 +276,14 @@ export default function Dashboard() {
   const { data: queuesList } = useQuery<Queue[]>({
     queryKey: ["/api/queues"],
   });
+  const { data: conferenceRooms, isLoading: loadingConferenceRooms } = useQuery<ConferenceRoom[]>({
+    queryKey: ["/api/conference-rooms"],
+  });
+  const { data: contactsList, isLoading: loadingContacts } = useQuery<Contact[]>({
+    queryKey: ["/api/contacts"],
+  });
 
-  const isLoading = loadingServers || loadingCompanies || loadingExtensions || loadingTrunks || loadingCalls;
+  const isLoading = loadingServers || loadingCompanies || loadingExtensions || loadingTrunks || loadingCalls || loadingConferenceRooms || loadingContacts;
 
   if (isLoading) return <DashboardSkeleton />;
 
@@ -273,6 +292,10 @@ export default function Dashboard() {
   const activeExtensions = extensions?.filter((e) => e.status === "active").length || 0;
   const registeredTrunks = trunks?.filter((t) => t.status === "registered").length || 0;
   const activeQueues = queuesList?.filter((q) => q.active).length || 0;
+  const activeConferenceRooms = conferenceRooms?.filter((c) => c.active).length || 0;
+  const totalContacts = contactsList?.length || 0;
+  const favoriteContacts = contactsList?.filter((c) => c.favorite).length || 0;
+  const answeredCalls = callsData?.logs?.filter((c) => c.disposition === "ANSWERED").length || 0;
 
   return (
     <div className="space-y-6" data-testid="page-dashboard">
@@ -316,6 +339,30 @@ export default function Dashboard() {
           icon={Users}
           description={`${queuesList?.length || 0} total`}
           testId="stat-queues"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard
+          title="Conferências"
+          value={activeConferenceRooms}
+          icon={Podcast}
+          description={`${conferenceRooms?.length || 0} total`}
+          testId="stat-conferences"
+        />
+        <StatCard
+          title="Contatos"
+          value={totalContacts}
+          icon={BookUser}
+          description={`${favoriteContacts} favoritos`}
+          testId="stat-contacts"
+        />
+        <StatCard
+          title="Total Chamadas"
+          value={callsData?.total || 0}
+          icon={PhoneCall}
+          description={`${answeredCalls} atendidas`}
+          testId="stat-total-calls"
         />
       </div>
 

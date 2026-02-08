@@ -44,35 +44,35 @@ import { useAuth } from "@/hooks/use-auth";
 
 const mainNav = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Empresas", url: "/companies", icon: Building2 },
-  { title: "Servidores", url: "/servers", icon: Server },
+  { title: "Empresas", url: "/companies", icon: Building2, roles: ["super_admin", "admin"] },
+  { title: "Servidores", url: "/servers", icon: Server, roles: ["super_admin", "admin"] },
 ];
 
 const telephonyNav = [
   { title: "Ramais", url: "/extensions", icon: Phone },
   { title: "Chamadas Online", url: "/online-calls", icon: PhoneCall },
-  { title: "Troncos SIP", url: "/sip-trunks", icon: Globe },
-  { title: "IVR / URA", url: "/ivr", icon: AudioLines },
-  { title: "Filas", url: "/queues", icon: Users },
-  { title: "Conferências", url: "/conference-rooms", icon: Podcast },
-  { title: "Music on Hold", url: "/music-on-hold", icon: Music },
-  { title: "Voicemail", url: "/voicemail", icon: Voicemail },
-  { title: "DID / DDR", url: "/dids", icon: Hash },
-  { title: "CallerID / Prefixos", url: "/caller-id-rules", icon: Shield },
+  { title: "Troncos SIP", url: "/sip-trunks", icon: Globe, roles: ["super_admin", "admin", "operator"] },
+  { title: "IVR / URA", url: "/ivr", icon: AudioLines, roles: ["super_admin", "admin", "operator"] },
+  { title: "Filas", url: "/queues", icon: Users, roles: ["super_admin", "admin", "operator"] },
+  { title: "Conferências", url: "/conference-rooms", icon: Podcast, roles: ["super_admin", "admin", "operator"] },
+  { title: "Music on Hold", url: "/music-on-hold", icon: Music, roles: ["super_admin", "admin"] },
+  { title: "Voicemail", url: "/voicemail", icon: Voicemail, roles: ["super_admin", "admin", "operator"] },
+  { title: "DID / DDR", url: "/dids", icon: Hash, roles: ["super_admin", "admin"] },
+  { title: "CallerID / Prefixos", url: "/caller-id-rules", icon: Shield, roles: ["super_admin", "admin"] },
   { title: "Agenda", url: "/phonebook", icon: BookUser },
-  { title: "Speed Dial / BLF", url: "/speed-dials", icon: Zap },
+  { title: "Speed Dial / BLF", url: "/speed-dials", icon: Zap, roles: ["super_admin", "admin", "operator"] },
 ];
 
 const systemNav = [
   { title: "Gravações", url: "/recordings", icon: FileAudio },
-  { title: "Firewall", url: "/firewall", icon: ShieldCheck },
+  { title: "Firewall", url: "/firewall", icon: ShieldCheck, roles: ["super_admin", "admin"] },
   { title: "Registro de Chamadas", url: "/call-logs", icon: FileText },
   { title: "Relatórios", url: "/reports", icon: BarChart3 },
-  { title: "Integrações", url: "/integrations", icon: Plug },
-  { title: "Usuários", url: "/users", icon: Users },
-  { title: "Log de Atividades", url: "/activity-log", icon: Activity },
-  { title: "Backup", url: "/backups", icon: Database },
-  { title: "Configurações", url: "/settings", icon: Settings },
+  { title: "Integrações", url: "/integrations", icon: Plug, roles: ["super_admin", "admin"] },
+  { title: "Usuários", url: "/users", icon: Users, roles: ["super_admin", "admin"] },
+  { title: "Log de Atividades", url: "/activity-log", icon: Activity, roles: ["super_admin", "admin"] },
+  { title: "Backup", url: "/backups", icon: Database, roles: ["super_admin", "admin"] },
+  { title: "Configurações", url: "/settings", icon: Settings, roles: ["super_admin", "admin"] },
 ];
 
 const roleLabels: Record<string, string> = {
@@ -106,7 +106,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Principal</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNav.map((item) => (
+              {mainNav.filter(item => !item.roles || item.roles.includes(user?.role || "")).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
@@ -128,7 +128,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Telefonia</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {telephonyNav.map((item) => (
+              {telephonyNav.filter(item => !item.roles || item.roles.includes(user?.role || "")).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
@@ -150,7 +150,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Sistema</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {systemNav.map((item) => (
+              {systemNav.filter(item => !item.roles || item.roles.includes(user?.role || "")).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
