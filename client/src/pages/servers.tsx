@@ -33,6 +33,9 @@ import {
   Zap,
   KeyRound,
   Lock,
+  GitCompare,
+  Download,
+  ArrowLeftRight,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -830,11 +833,199 @@ function AMIStatusPanel({ server }: { server: ServerType }) {
   );
 }
 
+interface ComparisonResult {
+  extensions: { onlyInServer: string[]; onlyInSystem: string[]; inBoth: string[] };
+  trunks: { onlyInServer: string[]; onlyInSystem: string[]; inBoth: string[] };
+  queues: { onlyInServer: string[]; onlyInSystem: string[]; inBoth: string[] };
+  conferences: { onlyInServer: string[]; onlyInSystem: string[]; inBoth: string[] };
+}
+
+function CompareDialog({ server, onClose }: { server: ServerType; onClose: () => void }) {
+  const { toast } = useToast();
+  const [selectedImport, setSelectedImport] = useState<string[]>([]);
+
+  const { data: comparison, isLoading, error } = useQuery<ComparisonResult>({
+    queryKey: ["/api/servers", server.id, "compare"],
+    queryFn: async () => {
+      const res = await fetch(`/api/servers/${server.id}/compare`, { credentials: "include" });
+      if (!res.ok) throw new Error((await res.json()).message || "Erro ao comparar");
+      return res.json();
+    },
+  });
+
+  const importMutation = useMutation({
+    mutationFn: async (extensionNames: string[]) => {
+      const res = await apiRequest("POST", `/api/servers/${server.id}/import-extensions`, { extensionNames });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Importação concluída", description: `${data.imported} ramal(is) importado(s)` });
+      setSelectedImport([]);
+      queryClient.invalidateQueries({ queryKey: ["/api/servers", server.id, "compare"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/extensions"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Erro na importação", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const toggleImport = (name: string) => {
+    setSelectedImport((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    );
+  };
+
+  const renderSection = (
+    title: string,
+    data: { onlyInServer: string[]; onlyInSystem: string[]; inBoth: string[] } | undefined,
+    canImport: boolean
+  ) => {
+    if (!data) return null;
+    const total = data.onlyInServer.length + data.onlyInSystem.length + data.inBoth.length;
+
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-medium">{title}</h4>
+          <Badge variant="secondary" className="text-[10px]">{total} total</Badge>
+        </div>
+
+        {data.inBoth.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3 text-emerald-500" /> Sincronizados ({data.inBoth.length})
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {data.inBoth.map((item) => (
+                <Badge key={item} variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
+                  {item}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {data.onlyInServer.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3 text-amber-500" /> Apenas no Asterisk ({data.onlyInServer.length})
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {data.onlyInServer.map((item) => (
+                <Badge
+                  key={item}
+                  variant="outline"
+                  className={`text-[10px] border-amber-500/30 text-amber-600 dark:text-amber-400 ${canImport ? "cursor-pointer" : ""} ${selectedImport.includes(item) ? "bg-amber-500/20" : ""}`}
+                  onClick={() => canImport && toggleImport(item)}
+                  data-testid={`compare-item-server-${item}`}
+                >
+                  {canImport && selectedImport.includes(item) && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                  {item}
+                </Badge>
+              ))}
+            </div>
+            {canImport && data.onlyInServer.length > 0 && (
+              <div className="flex items-center gap-2 mt-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs"
+                  onClick={() => setSelectedImport(data.onlyInServer)}
+                  data-testid="button-select-all-import"
+                >
+                  Selecionar Todos
+                </Button>
+                {selectedImport.length > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={() => importMutation.mutate(selectedImport)}
+                    disabled={importMutation.isPending}
+                    data-testid="button-import-selected"
+                  >
+                    {importMutation.isPending ? (
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    ) : (
+                      <Download className="w-3 h-3 mr-1" />
+                    )}
+                    Importar {selectedImport.length} Selecionado(s)
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {data.onlyInSystem.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <Info className="w-3 h-3 text-blue-500" /> Apenas no Sistema ({data.onlyInSystem.length})
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {data.onlyInSystem.map((item) => (
+                <Badge key={item} variant="outline" className="text-[10px] border-blue-500/30 text-blue-600 dark:text-blue-400">
+                  {item}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {total === 0 && (
+          <p className="text-xs text-muted-foreground">Nenhum registro encontrado</p>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ArrowLeftRight className="w-5 h-5" />
+            Comparar Informações - {server.name}
+          </DialogTitle>
+          <DialogDescription>
+            Comparação entre os dados cadastrados no sistema e os recursos configurados no servidor Asterisk
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            <span className="ml-2 text-sm text-muted-foreground">Consultando servidor via AMI...</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="flex items-center gap-2 p-4 rounded-md bg-destructive/10 text-destructive text-sm">
+            <XCircle className="w-4 h-4" />
+            {(error as Error).message}
+          </div>
+        )}
+
+        {comparison && (
+          <div className="space-y-6">
+            {renderSection("Ramais / Extensions", comparison.extensions, true)}
+            <div className="border-t" />
+            {renderSection("Troncos SIP", comparison.trunks, false)}
+            <div className="border-t" />
+            {renderSection("Filas", comparison.queues, false)}
+            <div className="border-t" />
+            {renderSection("Conferências", comparison.conferences, false)}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Servers() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ServerType | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedServer, setExpandedServer] = useState<string | null>(null);
+  const [compareServer, setCompareServer] = useState<ServerType | null>(null);
   const { toast } = useToast();
 
   const { data: servers, isLoading } = useQuery<ServerType[]>({
@@ -1356,6 +1547,11 @@ export default function Servers() {
                         <DropdownMenuItem onClick={() => setExpandedServer(isExpanded ? null : server.id)} data-testid={`menu-ami-panel-${server.id}`}>
                           <Eye className="w-4 h-4 mr-2" /> {isExpanded ? "Fechar Painel" : "Painel AMI"}
                         </DropdownMenuItem>
+                        {server.amiEnabled && (
+                          <DropdownMenuItem onClick={() => setCompareServer(server)} data-testid={`menu-compare-server-${server.id}`}>
+                            <GitCompare className="w-4 h-4 mr-2" /> Comparar Informações
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem onClick={() => deleteMutation.mutate(server.id)} className="text-destructive" data-testid={`menu-delete-server-${server.id}`}>
                           <Trash2 className="w-4 h-4 mr-2" /> Remover
                         </DropdownMenuItem>
@@ -1431,6 +1627,10 @@ export default function Servers() {
           </div>
         )}
       </div>
+
+      {compareServer && (
+        <CompareDialog server={compareServer} onClose={() => setCompareServer(null)} />
+      )}
     </div>
   );
 }
