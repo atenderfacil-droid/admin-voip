@@ -10,10 +10,7 @@ import {
   MoreHorizontal,
   Edit,
   Trash2,
-  Cpu,
-  HardDrive,
   Activity,
-  Clock,
   Wifi,
   WifiOff,
   Wrench,
@@ -23,26 +20,30 @@ import {
   RefreshCw,
   Terminal,
   Phone,
-  Globe,
   Eye,
   Loader2,
   CheckCircle2,
   XCircle,
+  Copy,
+  BookOpen,
+  Shield,
+  Info,
+  Link2,
+  Unplug,
+  Zap,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Server as ServerType } from "@shared/schema";
@@ -71,6 +72,190 @@ const statusConfig: Record<string, { icon: any; color: string; bg: string; label
   maintenance: { icon: Wrench, color: "text-amber-500", bg: "bg-amber-500/10", label: "Manutenção" },
   error: { icon: AlertTriangle, color: "text-red-500", bg: "bg-red-500/10", label: "Erro" },
 };
+
+function AMIConfigGuide({ server }: { server: ServerType }) {
+  const { toast } = useToast();
+
+  const managerConf = `; /etc/asterisk/manager.conf
+[general]
+enabled = yes
+port = ${server.amiPort}
+bindaddr = 0.0.0.0
+
+[${server.amiUsername || "admin_voip"}]
+secret = ${server.amiPassword ? "********" : "sua_senha_aqui"}
+deny = 0.0.0.0/0.0.0.0
+permit = 0.0.0.0/0.0.0.0
+read = system,call,log,verbose,command,agent,user,config,originate,dialplan,dtmf,reporting,cdr,security
+write = system,call,log,verbose,command,agent,user,config,originate,dialplan,dtmf,reporting`;
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copiado para a área de transferência" });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-md bg-muted/50 p-4 space-y-3">
+        <div className="flex items-start gap-2">
+          <BookOpen className="w-4 h-4 mt-0.5 text-primary" />
+          <div>
+            <h4 className="text-xs font-semibold">Como Configurar o AMI no Asterisk</h4>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              O AMI (Asterisk Manager Interface) permite gerenciar seu servidor Asterisk remotamente via TCP na porta {server.amiPort}.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="text-xs font-semibold flex items-center gap-1.5">
+            <Terminal className="w-3.5 h-3.5" /> 1. Edite o arquivo manager.conf
+          </h4>
+          <Button variant="ghost" size="sm" onClick={() => copyToClipboard(managerConf)} data-testid="button-copy-manager-conf">
+            <Copy className="w-3.5 h-3.5 mr-1.5" /> Copiar
+          </Button>
+        </div>
+        <pre className="bg-muted p-3 rounded-md text-[11px] overflow-auto max-h-48 whitespace-pre-wrap font-mono" data-testid="text-manager-conf">
+          {managerConf}
+        </pre>
+      </div>
+
+      <div className="space-y-2">
+        <h4 className="text-xs font-semibold flex items-center gap-1.5">
+          <Terminal className="w-3.5 h-3.5" /> 2. Recarregue o Asterisk
+        </h4>
+        <div className="bg-muted p-3 rounded-md space-y-1">
+          <code className="text-[11px] font-mono block">asterisk -rx "manager reload"</code>
+          <span className="text-[10px] text-muted-foreground">ou reinicie o serviço:</span>
+          <code className="text-[11px] font-mono block">systemctl restart asterisk</code>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <h4 className="text-xs font-semibold flex items-center gap-1.5">
+          <Shield className="w-3.5 h-3.5" /> 3. Libere a porta no firewall
+        </h4>
+        <div className="bg-muted p-3 rounded-md space-y-1">
+          <code className="text-[11px] font-mono block">firewall-cmd --permanent --add-port={server.amiPort}/tcp</code>
+          <code className="text-[11px] font-mono block">firewall-cmd --reload</code>
+          <span className="text-[10px] text-muted-foreground mt-1 block">ou com iptables:</span>
+          <code className="text-[11px] font-mono block">iptables -A INPUT -p tcp --dport {server.amiPort} -j ACCEPT</code>
+        </div>
+      </div>
+
+      <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+          <div>
+            <h4 className="text-xs font-semibold text-amber-600 dark:text-amber-400">Segurança</h4>
+            <ul className="text-[11px] text-muted-foreground mt-1 space-y-0.5 list-disc list-inside">
+              <li>Use senhas fortes (32+ caracteres)</li>
+              <li>Restrinja IPs com permit/deny no manager.conf</li>
+              <li>Considere usar SSH tunnel para acesso remoto seguro</li>
+              <li>Habilite TLS na porta 5039 para conexões criptografadas</li>
+              <li>Configure Fail2Ban para proteção contra brute-force</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-md bg-muted/50 p-3">
+        <h4 className="text-xs font-semibold flex items-center gap-1.5 mb-2">
+          <Shield className="w-3.5 h-3.5" /> Permissões Necessárias (read/write)
+        </h4>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+          {[
+            { perm: "system", desc: "Status e reload" },
+            { perm: "call", desc: "Chamadas e canais" },
+            { perm: "command", desc: "Comandos CLI" },
+            { perm: "agent", desc: "Filas e agentes" },
+            { perm: "config", desc: "Configurações" },
+            { perm: "originate", desc: "Originar chamadas" },
+            { perm: "reporting", desc: "CDR e relatórios" },
+            { perm: "dialplan", desc: "Plano de discagem" },
+          ].map((p) => (
+            <div key={p.perm} className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+              <span className="text-[11px]"><strong>{p.perm}</strong> - {p.desc}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AMIConnectionStatus({ server }: { server: ServerType }) {
+  const { toast } = useToast();
+  const [connectionResult, setConnectionResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/servers/${server.id}/ami/test`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setConnectionResult(data);
+      toast({
+        title: data.success ? "Conexão AMI estabelecida" : "Falha na conexão AMI",
+        description: data.message,
+        variant: data.success ? "default" : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      setConnectionResult({ success: false, message: error.message });
+      toast({
+        title: "Erro ao testar conexão",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  if (!server.amiEnabled) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/50">
+        <Unplug className="w-4 h-4 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">AMI desabilitado</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => testMutation.mutate()}
+        disabled={testMutation.isPending}
+        data-testid={`button-test-connection-${server.id}`}
+      >
+        {testMutation.isPending ? (
+          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+        ) : (
+          <Zap className="w-3.5 h-3.5 mr-1.5" />
+        )}
+        Testar Conexão
+      </Button>
+      {connectionResult && (
+        <Badge
+          variant={connectionResult.success ? "default" : "destructive"}
+          className="text-[10px]"
+          data-testid={`badge-connection-result-${server.id}`}
+        >
+          {connectionResult.success ? (
+            <CheckCircle2 className="w-3 h-3 mr-1" />
+          ) : (
+            <XCircle className="w-3 h-3 mr-1" />
+          )}
+          {connectionResult.success ? "Conectado" : "Falha"}
+        </Badge>
+      )}
+    </div>
+  );
+}
 
 function AMIStatusPanel({ server }: { server: ServerType }) {
   const [amiTab, setAmiTab] = useState("status");
@@ -107,20 +292,6 @@ function AMIStatusPanel({ server }: { server: ServerType }) {
       return res.json();
     },
     enabled: !!server.amiEnabled && amiTab === "channels",
-  });
-
-  const testMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/servers/${server.id}/ami/test`);
-      return res.json();
-    },
-    onSuccess: (data) => {
-      toast({
-        title: data.success ? "Conexão AMI OK" : "Falha na conexão AMI",
-        description: data.message,
-        variant: data.success ? "default" : "destructive",
-      });
-    },
   });
 
   const reloadMutation = useMutation({
@@ -161,7 +332,7 @@ function AMIStatusPanel({ server }: { server: ServerType }) {
   if (!server.amiEnabled) {
     return (
       <div className="text-center py-6 text-sm text-muted-foreground">
-        <Plug className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
+        <Unplug className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
         <p>AMI não habilitado neste servidor</p>
         <p className="text-xs mt-1">Edite o servidor para configurar as credenciais AMI</p>
       </div>
@@ -176,12 +347,9 @@ function AMIStatusPanel({ server }: { server: ServerType }) {
           <TabsTrigger value="peers" data-testid="tab-ami-peers">Peers</TabsTrigger>
           <TabsTrigger value="channels" data-testid="tab-ami-channels">Canais</TabsTrigger>
           <TabsTrigger value="cli" data-testid="tab-ami-cli">CLI</TabsTrigger>
+          <TabsTrigger value="config" data-testid="tab-ami-config">Configuração</TabsTrigger>
         </TabsList>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => testMutation.mutate()} disabled={testMutation.isPending} data-testid="button-test-ami">
-            {testMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <TestTube className="w-3.5 h-3.5 mr-1.5" />}
-            Testar
-          </Button>
           <Button variant="outline" size="sm" onClick={() => reloadMutation.mutate()} disabled={reloadMutation.isPending} data-testid="button-reload-ami">
             {reloadMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
             Reload
@@ -250,7 +418,11 @@ function AMIStatusPanel({ server }: { server: ServerType }) {
             </Button>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">Sem dados AMI disponíveis</p>
+          <div className="text-center py-6">
+            <XCircle className="w-8 h-8 mx-auto mb-2 text-destructive/50" />
+            <p className="text-sm text-muted-foreground">Não foi possível obter dados do AMI</p>
+            <p className="text-xs text-muted-foreground mt-1">Verifique as credenciais e a conectividade na aba "Configuração"</p>
+          </div>
         )}
       </TabsContent>
 
@@ -399,6 +571,10 @@ function AMIStatusPanel({ server }: { server: ServerType }) {
             </pre>
           )}
         </div>
+      </TabsContent>
+
+      <TabsContent value="config">
+        <AMIConfigGuide server={server} />
       </TabsContent>
     </Tabs>
   );
@@ -562,13 +738,16 @@ export default function Servers() {
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editing ? "Editar Servidor" : "Novo Servidor"}</DialogTitle>
+              <DialogDescription>
+                {editing ? "Atualize as informações do servidor Asterisk" : "Cadastre um novo servidor Asterisk para gerenciamento via AMI"}
+              </DialogDescription>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField control={form.control} name="name" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Nome</FormLabel>
-                    <FormControl><Input {...field} data-testid="input-server-name" /></FormControl>
+                    <FormLabel>Nome do Servidor</FormLabel>
+                    <FormControl><Input {...field} placeholder="Asterisk Principal" data-testid="input-server-name" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -576,7 +755,7 @@ export default function Servers() {
                   <FormField control={form.control} name="hostname" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Hostname</FormLabel>
-                      <FormControl><Input {...field} data-testid="input-server-hostname" /></FormControl>
+                      <FormControl><Input {...field} placeholder="pbx.empresa.com.br" data-testid="input-server-hostname" /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -626,34 +805,48 @@ export default function Servers() {
                 )} />
 
                 <div className="border-t pt-4 mt-4">
-                  <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                    <Plug className="w-4 h-4" /> Configuração AMI
+                  <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
+                    <Plug className="w-4 h-4 text-primary" /> Conexão AMI (Asterisk Manager Interface)
                   </h3>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Conecte ao Asterisk via AMI na porta TCP 5038 para gerenciamento em tempo real
+                  </p>
+
                   <FormField control={form.control} name="amiEnabled" render={({ field }) => (
                     <FormItem className="flex items-center justify-between gap-4 rounded-md border p-3 mb-3">
                       <div>
-                        <FormLabel className="text-sm">Habilitar AMI</FormLabel>
-                        <FormDescription className="text-xs">Conectar via Asterisk Manager Interface</FormDescription>
+                        <FormLabel className="text-sm">Habilitar Conexão AMI</FormLabel>
+                        <FormDescription className="text-xs">
+                          Ativa o gerenciamento remoto via TCP socket
+                        </FormDescription>
                       </div>
                       <FormControl>
                         <Switch checked={field.value} onCheckedChange={field.onChange} data-testid="switch-ami-enabled" />
                       </FormControl>
                     </FormItem>
                   )} />
+
                   {form.watch("amiEnabled") && (
-                    <>
+                    <div className="space-y-3 rounded-md border p-3 bg-muted/30">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                        <Info className="w-3.5 h-3.5 shrink-0" />
+                        <span>Configure estas credenciais no <code className="bg-muted px-1 py-0.5 rounded text-[10px]">manager.conf</code> do seu servidor Asterisk</span>
+                      </div>
+
                       <FormField control={form.control} name="amiPort" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Porta AMI</FormLabel>
                           <FormControl><Input type="number" {...field} data-testid="input-ami-port" /></FormControl>
+                          <FormDescription className="text-[10px]">Porta padrão: 5038 (TCP)</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )} />
-                      <div className="grid grid-cols-2 gap-4 mt-3">
+                      <div className="grid grid-cols-2 gap-3">
                         <FormField control={form.control} name="amiUsername" render={({ field }) => (
                           <FormItem>
                             <FormLabel>Usuário AMI</FormLabel>
                             <FormControl><Input {...field} placeholder="admin" data-testid="input-ami-username" /></FormControl>
+                            <FormDescription className="text-[10px]">Definido em manager.conf</FormDescription>
                             <FormMessage />
                           </FormItem>
                         )} />
@@ -661,11 +854,19 @@ export default function Servers() {
                           <FormItem>
                             <FormLabel>Senha AMI</FormLabel>
                             <FormControl><Input type="password" {...field} placeholder="********" data-testid="input-ami-password" /></FormControl>
+                            <FormDescription className="text-[10px]">Campo "secret" do manager.conf</FormDescription>
                             <FormMessage />
                           </FormItem>
                         )} />
                       </div>
-                    </>
+
+                      <div className="rounded-md bg-muted/50 p-2.5 mt-2">
+                        <p className="text-[10px] text-muted-foreground flex items-start gap-1.5">
+                          <Shield className="w-3 h-3 mt-0.5 shrink-0" />
+                          A conexão AMI usa TCP socket direto na porta {form.watch("amiPort")}. Certifique-se de que a porta esteja aberta no firewall e o IP deste servidor esteja permitido no manager.conf.
+                        </p>
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -707,34 +908,27 @@ export default function Servers() {
                     </div>
                     <div>
                       <h3 className="text-sm font-semibold">{server.name}</h3>
-                      <span className="text-[11px] text-muted-foreground">{server.hostname}</span>
+                      <span className="text-[11px] text-muted-foreground">{server.hostname} ({server.ipAddress})</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {server.amiEnabled && (
-                      <Badge variant="outline" className="text-[10px] border-emerald-500/50 text-emerald-600 dark:text-emerald-400">
-                        <Plug className="w-3 h-3 mr-1" /> AMI
-                      </Badge>
-                    )}
                     <Badge variant={server.status === "online" ? "default" : "secondary"} className="text-[10px]">
                       {config.label}
                     </Badge>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" data-testid={`button-menu-server-${server.id}`}>
                           <MoreHorizontal className="w-4 h-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openEdit(server)}>
+                        <DropdownMenuItem onClick={() => openEdit(server)} data-testid={`menu-edit-server-${server.id}`}>
                           <Edit className="w-4 h-4 mr-2" /> Editar
                         </DropdownMenuItem>
-                        {server.amiEnabled && (
-                          <DropdownMenuItem onClick={() => setExpandedServer(isExpanded ? null : server.id)}>
-                            <Eye className="w-4 h-4 mr-2" /> {isExpanded ? "Fechar AMI" : "Painel AMI"}
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onClick={() => deleteMutation.mutate(server.id)} className="text-destructive">
+                        <DropdownMenuItem onClick={() => setExpandedServer(isExpanded ? null : server.id)} data-testid={`menu-ami-panel-${server.id}`}>
+                          <Eye className="w-4 h-4 mr-2" /> {isExpanded ? "Fechar Painel" : "Painel AMI"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => deleteMutation.mutate(server.id)} className="text-destructive" data-testid={`menu-delete-server-${server.id}`}>
                           <Trash2 className="w-4 h-4 mr-2" /> Remover
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -742,30 +936,47 @@ export default function Servers() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                      <Activity className="w-3 h-3" /> Máx. Canais
-                    </span>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                  <div className="flex items-center gap-1.5">
+                    <Activity className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-[11px] text-muted-foreground">Canais:</span>
                     <span className="text-[11px] font-medium">{server.maxChannels}</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                      <Plug className="w-3 h-3" /> AMI
-                    </span>
-                    <span className="text-[11px] font-medium">{server.amiEnabled ? "Habilitado" : "Desabilitado"}</span>
+                  <div className="flex items-center gap-1.5">
+                    <Link2 className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-[11px] text-muted-foreground">Porta:</span>
+                    <span className="text-[11px] font-medium">{server.port}</span>
                   </div>
+                  <div className="flex items-center gap-1.5">
+                    <Plug className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-[11px] text-muted-foreground">AMI:</span>
+                    <span className="text-[11px] font-medium">{server.amiEnabled ? `Porta ${server.amiPort}` : "Desabilitado"}</span>
+                  </div>
+                  {server.asteriskVersion && (
+                    <div className="flex items-center gap-1.5">
+                      <Server className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-[11px] text-muted-foreground">Versão:</span>
+                      <span className="text-[11px] font-medium">v{server.asteriskVersion}</span>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-2 mt-4 pt-3 border-t flex-wrap">
-                  <Badge variant="outline" className="text-[10px]">{server.ipAddress}:{server.port}</Badge>
-                  {server.asteriskVersion && <Badge variant="outline" className="text-[10px]">v{server.asteriskVersion}</Badge>}
+                <div className="flex items-center gap-2 pt-3 border-t flex-wrap">
                   <Badge variant="secondary" className="text-[10px]">
                     {server.mode === "shared" ? "Compartilhado" : "Dedicado"}
                   </Badge>
-                  {server.amiEnabled && (
-                    <Badge variant="outline" className="text-[10px]">AMI:{server.amiPort}</Badge>
+                  {server.amiEnabled ? (
+                    <Badge variant="outline" className="text-[10px] border-emerald-500/50 text-emerald-600 dark:text-emerald-400">
+                      <Plug className="w-3 h-3 mr-1" /> AMI Habilitado
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px]">
+                      <Unplug className="w-3 h-3 mr-1" /> AMI Desabilitado
+                    </Badge>
                   )}
+                  <div className="ml-auto">
+                    <AMIConnectionStatus server={server} />
+                  </div>
                 </div>
 
                 {isExpanded && <AMIStatusPanel server={server} />}
@@ -777,6 +988,7 @@ export default function Servers() {
           <div className="col-span-full text-center py-12 text-sm text-muted-foreground">
             <Server className="w-10 h-10 mx-auto mb-3 text-muted-foreground/50" />
             <p>Nenhum servidor encontrado</p>
+            <p className="text-xs mt-1">Clique em "Novo Servidor" para cadastrar seu primeiro servidor Asterisk</p>
           </div>
         )}
       </div>
