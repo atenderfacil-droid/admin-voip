@@ -52,8 +52,9 @@ client/src/
     users.tsx          - Gestão de usuários do sistema (CRUD)
 server/
   index.ts             - Express server entry point
-  routes.ts            - All API routes (auth + CRUD + AMI + SSH recordings/firewall)
+  routes.ts            - All API routes (auth + CRUD + AMI + SSH recordings/firewall + provisioning)
   asterisk.ts          - AsteriskAMI service (TCP socket AMI client)
+  asterisk-provisioner.ts - Provisioning engine: writes Asterisk config files via SSH and reloads modules
   ssh-config.ts        - Remote AMI configuration via SSH tunnel + exported SSH utilities
   storage.ts           - Database storage layer (IStorage interface)
   db.ts                - Database connection (Drizzle + pg)
