@@ -9,6 +9,7 @@ import {
   AudioLines,
   Plug,
   FileText,
+  BarChart3,
   Settings,
   Headphones,
   Users,
@@ -46,6 +47,7 @@ const telephonyNav = [
 
 const systemNav = [
   { title: "Registro de Chamadas", url: "/call-logs", icon: FileText },
+  { title: "Relatórios", url: "/reports", icon: BarChart3 },
   { title: "Integrações", url: "/integrations", icon: Plug },
   { title: "Usuários", url: "/users", icon: Users },
   { title: "Configurações", url: "/settings", icon: Settings },

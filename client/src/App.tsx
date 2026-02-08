@@ -16,6 +16,7 @@ import Extensions from "@/pages/extensions";
 import SipTrunks from "@/pages/sip-trunks";
 import IVR from "@/pages/ivr";
 import CallLogs from "@/pages/call-logs";
+import Reports from "@/pages/reports";
 import Integrations from "@/pages/integrations";
 import Settings from "@/pages/settings";
 import UsersPage from "@/pages/users";
@@ -37,6 +38,7 @@ function ProtectedRouter() {
       <Route path="/queues" component={Queues} />
       <Route path="/online-calls" component={OnlineCalls} />
       <Route path="/call-logs" component={CallLogs} />
+      <Route path="/reports" component={Reports} />
       <Route path="/integrations" component={Integrations} />
       <Route path="/settings" component={Settings} />
       <Route path="/users" component={UsersPage} />
