@@ -220,6 +220,180 @@ write = system,call,log,verbose,command,agent,user,config,originate,dialplan,dtm
   );
 }
 
+function AMISetupDialog({ server }: { server: ServerType }) {
+  const [open, setOpen] = useState(false);
+  const [setupResult, setSetupResult] = useState<any>(null);
+  const { toast } = useToast();
+
+  const setupMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/servers/${server.id}/ami/setup-remote`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setSetupResult(data);
+      queryClient.invalidateQueries({ queryKey: ["/api/servers"] });
+      if (data.success) {
+        toast({ title: "AMI configurado com sucesso", description: data.message });
+      } else {
+        toast({ title: "Falha na configuração", description: data.message, variant: "destructive" });
+      }
+    },
+    onError: (error: Error) => {
+      setSetupResult({ success: false, message: error.message, steps: [] });
+      toast({ title: "Erro na configuração remota", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const stepIcons: Record<string, any> = {
+    pending: <div className="w-4 h-4 rounded-full border-2 border-muted-foreground/30" />,
+    running: <Loader2 className="w-4 h-4 animate-spin text-blue-500" />,
+    success: <CheckCircle2 className="w-4 h-4 text-emerald-500" />,
+    error: <XCircle className="w-4 h-4 text-red-500" />,
+  };
+
+  if (!server.sshEnabled) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSetupResult(null); }}>
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          data-testid={`button-setup-ami-${server.id}`}
+        >
+          <Wrench className="w-3.5 h-3.5 mr-1.5" />
+          Configurar AMI
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Shield className="w-5 h-5" />
+            Configurar AMI no Servidor
+          </DialogTitle>
+          <DialogDescription>
+            Configura automaticamente o AMI (manager.conf) no servidor Asterisk via SSH tunnel seguro.
+          </DialogDescription>
+        </DialogHeader>
+
+        {!setupResult && !setupMutation.isPending && (
+          <div className="space-y-4">
+            <div className="rounded-md bg-muted/50 p-4 space-y-3">
+              <h4 className="text-xs font-semibold">O que será configurado:</h4>
+              <ul className="text-[11px] text-muted-foreground space-y-1.5">
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3 h-3 mt-0.5 text-emerald-500 shrink-0" />
+                  Conexão SSH segura ao servidor {server.sshHost}
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3 h-3 mt-0.5 text-emerald-500 shrink-0" />
+                  Backup do manager.conf existente
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3 h-3 mt-0.5 text-emerald-500 shrink-0" />
+                  Criação do usuário AMI: <strong>{server.amiUsername || "admin_voip"}</strong>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3 h-3 mt-0.5 text-emerald-500 shrink-0" />
+                  AMI na porta {server.amiPort} (bind: 127.0.0.1 - seguro via SSH)
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3 h-3 mt-0.5 text-emerald-500 shrink-0" />
+                  Reload automático do Asterisk Manager
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3 h-3 mt-0.5 text-emerald-500 shrink-0" />
+                  Habilitação automática do AMI neste servidor
+                </li>
+              </ul>
+            </div>
+
+            {(!server.amiUsername || !server.amiPassword) && (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                  <p className="text-[11px] text-muted-foreground">
+                    Configure o usuário e senha AMI nas configurações do servidor antes de executar a configuração remota.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setOpen(false)}>Cancelar</Button>
+              <Button
+                size="sm"
+                onClick={() => setupMutation.mutate()}
+                disabled={!server.amiUsername || !server.amiPassword}
+                data-testid={`button-execute-setup-${server.id}`}
+              >
+                <Zap className="w-3.5 h-3.5 mr-1.5" />
+                Executar Configuração
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {(setupMutation.isPending || setupResult) && (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              {(setupResult?.steps || [
+                { step: "Conectando via SSH", status: "running" },
+                { step: "Verificando Asterisk instalado", status: "pending" },
+                { step: "Fazendo backup do manager.conf", status: "pending" },
+                { step: "Configurando AMI (manager.conf)", status: "pending" },
+                { step: "Recarregando Asterisk Manager", status: "pending" },
+                { step: "Verificando configuração aplicada", status: "pending" },
+              ]).map((s: any, i: number) => (
+                <div key={i} className="flex items-center gap-3 py-1.5">
+                  {stepIcons[s.status] || stepIcons.pending}
+                  <div className="flex-1 min-w-0">
+                    <span className={`text-xs ${s.status === "error" ? "text-red-500" : s.status === "success" ? "" : "text-muted-foreground"}`}>
+                      {s.step}
+                    </span>
+                    {s.message && (
+                      <p className={`text-[10px] truncate ${s.status === "error" ? "text-red-400" : "text-muted-foreground"}`}>
+                        {s.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {setupResult && (
+              <div className={`rounded-md p-3 ${setupResult.success ? "bg-emerald-500/10 border border-emerald-500/30" : "bg-red-500/10 border border-red-500/30"}`}>
+                <div className="flex items-start gap-2">
+                  {setupResult.success ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                  )}
+                  <p className={`text-xs ${setupResult.success ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                    {setupResult.message}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {setupResult && (
+              <div className="flex justify-end gap-2">
+                {!setupResult.success && (
+                  <Button variant="outline" size="sm" onClick={() => { setSetupResult(null); setupMutation.reset(); }}>
+                    Tentar Novamente
+                  </Button>
+                )}
+                <Button size="sm" onClick={() => setOpen(false)}>Fechar</Button>
+              </div>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AMIConnectionStatus({ server }: { server: ServerType }) {
   const { toast } = useToast();
   const [connectionResult, setConnectionResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -279,13 +453,14 @@ function AMIConnectionStatus({ server }: { server: ServerType }) {
   const handleAmiDisabled = () => {
     toast({
       title: "AMI não habilitado",
-      description: "Edite o servidor e habilite o AMI com as credenciais para poder testar ou conectar.",
+      description: "Edite o servidor e habilite o AMI com as credenciais, ou use 'Configurar AMI' para configuração automática via SSH.",
       variant: "destructive",
     });
   };
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
+      <AMISetupDialog server={server} />
       <Button
         variant="outline"
         size="sm"

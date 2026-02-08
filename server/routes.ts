@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcrypt";
 import { createAMIClient, type SSHConfig } from "./asterisk";
+import { setupAMIRemotely } from "./ssh-config";
 import {
   insertCompanySchema,
   insertServerSchema,
@@ -319,6 +320,52 @@ export async function registerRoutes(
         await storage.updateServer(serverId, { status: "offline" });
       } catch {}
       res.json({ success: false, message: error.message, status: "offline" });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/setup-remote", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    const serverId = req.params.id as string;
+    try {
+      const server = await storage.getServer(serverId);
+      if (!server) return res.status(404).json({ message: "Servidor não encontrado" });
+      if (!canAccessCompany(req, server.companyId)) {
+        return res.status(403).json({ message: "Acesso negado" });
+      }
+      if (!server.sshEnabled || !server.sshHost || !server.sshUsername) {
+        return res.status(400).json({ message: "SSH não está configurado neste servidor. Configure o túnel SSH primeiro." });
+      }
+      if (!server.amiUsername || !server.amiPassword) {
+        return res.status(400).json({ message: "Credenciais AMI (usuário e senha) são obrigatórias para configuração remota." });
+      }
+
+      const result = await setupAMIRemotely(
+        {
+          host: server.sshHost,
+          port: server.sshPort || 22,
+          username: server.sshUsername,
+          authMethod: (server.sshAuthMethod as "password" | "privatekey") || "password",
+          password: server.sshPassword || undefined,
+          privateKey: server.sshPrivateKey || undefined,
+        },
+        {
+          amiPort: server.amiPort || 5038,
+          amiUsername: server.amiUsername,
+          amiPassword: server.amiPassword,
+        }
+      );
+
+      if (result.success) {
+        const updateData: any = { amiEnabled: true, status: "online" };
+        if (result.asteriskVersion) updateData.asteriskVersion = result.asteriskVersion;
+        await storage.updateServer(serverId, updateData);
+      }
+
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message, steps: [] });
     }
   });
 
