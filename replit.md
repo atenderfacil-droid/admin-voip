@@ -32,13 +32,15 @@ client/src/
     extensions.tsx     - SIP extensions/ramais management (CRUD)
     sip-trunks.tsx     - SIP trunk configuration (CRUD)
     ivr.tsx            - IVR/URA menu management (CRUD)
+    queues.tsx         - Queue management (CRUD + real-time AMI status)
     call-logs.tsx      - Call detail records viewer with filters
     integrations.tsx   - Device compatibility, SIP providers, API docs
     settings.tsx       - Platform configuration settings
     users.tsx          - Gestão de usuários do sistema (CRUD)
 server/
   index.ts             - Express server entry point
-  routes.ts            - All API routes (auth + CRUD)
+  routes.ts            - All API routes (auth + CRUD + AMI)
+  asterisk.ts          - AsteriskAMI service (TCP socket AMI client)
   storage.ts           - Database storage layer (IStorage interface)
   db.ts                - Database connection (Drizzle + pg)
   seed.ts              - Seed data for initial setup
@@ -51,12 +53,20 @@ shared/
 - Sistema de login e autenticação com sessões seguras
 - Gestão de usuários com níveis de acesso (super_admin, admin, operator, viewer)
 - Isolamento multi-tenant: dados filtrados por empresa do usuário logado
-- Dashboard with server monitoring (CPU, memory, channels, uptime)
+- Dashboard with server monitoring (real AMI data when configured)
 - Multi-tenant company management (Master/Tenant/Dedicated)
-- Asterisk server management (shared/dedicated modes)
+- Asterisk server management with full AMI integration (shared/dedicated modes)
+- **AMI Integration**: Real-time connection to Asterisk via TCP socket on port 5038
+  - Test connection, CoreStatus, CoreSettings, SIP/PJSIP peers
+  - Active channels with hangup capability
+  - Queue status with member management (add/remove/pause)
+  - Voicemail users list, SIP registrations
+  - Reload Asterisk, CLI command execution
+  - Originate calls, redirect channels, monitoring
 - SIP extension management with voicemail and call recording
 - SIP trunk configuration for VoIP providers
 - IVR/URA menu builder with multi-level options
+- **Queue management** (CRUD + real-time AMI queue status)
 - Call detail records (CDR) with filtering
 - Integration documentation (softphones, IP phones, SIP providers, API)
 - Dark/light theme support
@@ -69,7 +79,7 @@ shared/
 - **viewer**: Apenas visualização dentro da própria empresa
 
 ## Database Models
-- users, companies, servers, extensions, sipTrunks, ivrMenus, callLogs
+- users, companies, servers (with AMI fields), extensions, sipTrunks, ivrMenus, queues, callLogs
 
 ## API Endpoints
 All prefixed with `/api/`:
@@ -82,7 +92,28 @@ All prefixed with `/api/`:
 - `/extensions` - CRUD
 - `/sip-trunks` - CRUD
 - `/ivr-menus` - CRUD
+- `/queues` - CRUD
 - `/call-logs` - GET only
+- `/servers/:id/ami/test` - POST test AMI connection
+- `/servers/:id/ami/status` - GET full AMI status
+- `/servers/:id/ami/core-status` - GET Asterisk core status
+- `/servers/:id/ami/core-settings` - GET Asterisk core settings
+- `/servers/:id/ami/peers` - GET SIP/PJSIP peers
+- `/servers/:id/ami/channels` - GET active channels
+- `/servers/:id/ami/registrations` - GET SIP registrations
+- `/servers/:id/ami/queues` - GET queue status from Asterisk
+- `/servers/:id/ami/queue-summary` - GET queue summary
+- `/servers/:id/ami/voicemail` - GET voicemail users
+- `/servers/:id/ami/reload` - POST reload Asterisk
+- `/servers/:id/ami/command` - POST execute CLI command
+- `/servers/:id/ami/originate` - POST originate call
+- `/servers/:id/ami/hangup` - POST hangup channel
+- `/servers/:id/ami/queue-add` - POST add member to queue
+- `/servers/:id/ami/queue-remove` - POST remove member from queue
+- `/servers/:id/ami/queue-pause` - POST pause/unpause queue member
+- `/servers/:id/ami/extension-state/:exten/:context` - GET extension state
+- `/servers/:id/ami/redirect` - POST redirect channel
+- `/servers/:id/ami/monitor` - POST start monitoring
 
 ## Running
 - `npm run dev` starts Express + Vite on port 5000

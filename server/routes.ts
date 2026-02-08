@@ -2,12 +2,14 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcrypt";
+import { createAMIClient } from "./asterisk";
 import {
   insertCompanySchema,
   insertServerSchema,
   insertExtensionSchema,
   insertSipTrunkSchema,
   insertIvrMenuSchema,
+  insertQueueSchema,
   insertUserSchema,
   type User,
 } from "@shared/schema";
@@ -60,6 +62,18 @@ function canAccessCompany(req: Request, companyId: string | null): boolean {
   return user.companyId === companyId;
 }
 
+async function getAMIClient(serverId: string, req: Request) {
+  const server = await storage.getServer(serverId);
+  if (!server) throw new Error("Servidor não encontrado");
+  if (!canAccessCompany(req, server.companyId)) {
+    throw new Error("Acesso negado");
+  }
+  if (!server.amiEnabled || !server.amiUsername || !server.amiPassword) {
+    throw new Error("AMI não configurado neste servidor");
+  }
+  return { ami: createAMIClient(server.ipAddress, server.amiPort, server.amiUsername, server.amiPassword), server };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -110,6 +124,7 @@ export async function registerRoutes(
   app.use("/api/extensions", requireAuth);
   app.use("/api/sip-trunks", requireAuth);
   app.use("/api/ivr-menus", requireAuth);
+  app.use("/api/queues", requireAuth);
   app.use("/api/call-logs", requireAuth);
   app.use("/api/users", requireAuth);
 
@@ -238,6 +253,260 @@ export async function registerRoutes(
     }
     await storage.deleteServer(req.params.id);
     res.status(204).send();
+  });
+
+  // AMI Endpoints (real Asterisk integration)
+  app.post("/api/servers/:id/ami/test", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const result = await ami.testConnection();
+      res.json(result);
+    } catch (error: any) {
+      res.json({ success: false, message: error.message });
+    }
+  });
+
+  app.get("/api/servers/:id/ami/status", requireAuth, async (req, res) => {
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const fullStatus = await ami.getFullStatus();
+      res.json(fullStatus);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/servers/:id/ami/core-status", requireAuth, async (req, res) => {
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const status = await ami.getCoreStatus();
+      res.json(status);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/servers/:id/ami/core-settings", requireAuth, async (req, res) => {
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const settings = await ami.getCoreSettings();
+      res.json(settings);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/servers/:id/ami/peers", requireAuth, async (req, res) => {
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const [sipPeers, pjsipEndpoints] = await Promise.all([
+        ami.getSIPPeers().catch(() => []),
+        ami.getPJSIPEndpoints().catch(() => []),
+      ]);
+      res.json({ sip: sipPeers, pjsip: pjsipEndpoints });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/servers/:id/ami/channels", requireAuth, async (req, res) => {
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const channels = await ami.getActiveChannels();
+      res.json(channels);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/servers/:id/ami/registrations", requireAuth, async (req, res) => {
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const registrations = await ami.getRegistrations();
+      res.json(registrations);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/servers/:id/ami/queues", requireAuth, async (req, res) => {
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const queueData = await ami.getQueueStatus();
+      res.json(queueData);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/servers/:id/ami/queue-summary", requireAuth, async (req, res) => {
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const summary = await ami.getQueueSummary();
+      res.json(summary);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/servers/:id/ami/voicemail", requireAuth, async (req, res) => {
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const vmUsers = await ami.getVoicemailUsers();
+      res.json(vmUsers);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/reload", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const result = await ami.reload(req.body.module);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/command", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    const { command } = req.body;
+    if (!command) {
+      return res.status(400).json({ message: "Comando obrigatório" });
+    }
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const output = await ami.executeCommand(command);
+      res.json({ output });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/originate", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const result = await ami.originate(req.body);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/hangup", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    const { channel } = req.body;
+    if (!channel) {
+      return res.status(400).json({ message: "Canal obrigatório" });
+    }
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const result = await ami.hangupChannel(channel);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/queue-add", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    const { queue, iface, memberName, penalty } = req.body;
+    if (!queue || !iface) {
+      return res.status(400).json({ message: "Fila e interface obrigatórios" });
+    }
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const result = await ami.queueAdd(queue, iface, memberName, penalty);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/queue-remove", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    const { queue, iface } = req.body;
+    if (!queue || !iface) {
+      return res.status(400).json({ message: "Fila e interface obrigatórios" });
+    }
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const result = await ami.queueRemove(queue, iface);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/queue-pause", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    const { queue, iface, paused, reason } = req.body;
+    if (!queue || !iface || paused === undefined) {
+      return res.status(400).json({ message: "Fila, interface e estado obrigatórios" });
+    }
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const result = await ami.queuePause(queue, iface, paused, reason);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  });
+
+  app.get("/api/servers/:id/ami/extension-state/:exten/:context", requireAuth, async (req, res) => {
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const result = await ami.getExtensionState(req.params.exten as string, req.params.context as string);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/redirect", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const result = await ami.redirect(req.body.channel, req.body.context, req.body.exten, req.body.priority);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/monitor", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const result = await ami.monitor(req.body.channel, req.body.file, req.body.mix);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
   });
 
   // Extensions (multi-tenant)
@@ -453,6 +722,78 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Acesso negado" });
     }
     await storage.deleteIvrMenu(req.params.id);
+    res.status(204).send();
+  });
+
+  // Queues (multi-tenant)
+  app.get("/api/queues", async (req, res) => {
+    const companyId = getCompanyFilter(req);
+    const queuesList = await storage.getQueues(companyId);
+    res.json(queuesList);
+  });
+
+  app.get("/api/queues/:id", async (req, res) => {
+    const queue = await storage.getQueue(req.params.id);
+    if (!queue) return res.status(404).json({ message: "Fila não encontrada" });
+    if (!canAccessCompany(req, queue.companyId)) {
+      return res.status(403).json({ message: "Acesso negado" });
+    }
+    res.json(queue);
+  });
+
+  app.post("/api/queues", async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    const result = insertQueueSchema.safeParse(req.body);
+    if (!result.success) {
+      return res.status(400).json({ message: "Dados inválidos", errors: result.error.flatten().fieldErrors });
+    }
+    const companyId = enforceCompanyId(req, result.data.companyId);
+    if (!companyId) return res.status(400).json({ message: "Empresa obrigatória" });
+    const data = { ...result.data, companyId };
+    try {
+      const queue = await storage.createQueue(data);
+      res.status(201).json(queue);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/queues/:id", async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    const existing = await storage.getQueue(req.params.id);
+    if (!existing) return res.status(404).json({ message: "Fila não encontrada" });
+    if (!canAccessCompany(req, existing.companyId)) {
+      return res.status(403).json({ message: "Acesso negado" });
+    }
+    const result = insertQueueSchema.partial().safeParse(req.body);
+    if (!result.success) {
+      return res.status(400).json({ message: "Dados inválidos", errors: result.error.flatten().fieldErrors });
+    }
+    const data = { ...result.data };
+    if (!isSuperAdmin(req)) delete data.companyId;
+    try {
+      const queue = await storage.updateQueue(req.params.id, data);
+      if (!queue) return res.status(404).json({ message: "Fila não encontrada" });
+      res.json(queue);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/queues/:id", async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    const existing = await storage.getQueue(req.params.id);
+    if (!existing) return res.status(404).json({ message: "Fila não encontrada" });
+    if (!canAccessCompany(req, existing.companyId)) {
+      return res.status(403).json({ message: "Acesso negado" });
+    }
+    await storage.deleteQueue(req.params.id);
     res.status(204).send();
   });
 

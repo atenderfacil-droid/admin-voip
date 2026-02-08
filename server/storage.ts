@@ -7,6 +7,7 @@ import {
   extensions,
   sipTrunks,
   ivrMenus,
+  queues,
   callLogs,
   type User,
   type InsertUser,
@@ -20,6 +21,8 @@ import {
   type InsertSipTrunk,
   type IvrMenu,
   type InsertIvrMenu,
+  type Queue,
+  type InsertQueue,
   type CallLog,
   type InsertCallLog,
 } from "@shared/schema";
@@ -61,6 +64,12 @@ export interface IStorage {
   createIvrMenu(menu: InsertIvrMenu): Promise<IvrMenu>;
   updateIvrMenu(id: string, menu: Partial<InsertIvrMenu>): Promise<IvrMenu | undefined>;
   deleteIvrMenu(id: string): Promise<void>;
+
+  getQueues(companyId?: string): Promise<Queue[]>;
+  getQueue(id: string): Promise<Queue | undefined>;
+  createQueue(queue: InsertQueue): Promise<Queue>;
+  updateQueue(id: string, queue: Partial<InsertQueue>): Promise<Queue | undefined>;
+  deleteQueue(id: string): Promise<void>;
 
   getCallLogs(companyId?: string): Promise<CallLog[]>;
   createCallLog(log: InsertCallLog): Promise<CallLog>;
@@ -226,6 +235,32 @@ export class DatabaseStorage implements IStorage {
 
   async deleteIvrMenu(id: string): Promise<void> {
     await db.delete(ivrMenus).where(eq(ivrMenus.id, id));
+  }
+
+  async getQueues(companyId?: string): Promise<Queue[]> {
+    if (companyId) {
+      return db.select().from(queues).where(eq(queues.companyId, companyId));
+    }
+    return db.select().from(queues);
+  }
+
+  async getQueue(id: string): Promise<Queue | undefined> {
+    const [queue] = await db.select().from(queues).where(eq(queues.id, id));
+    return queue;
+  }
+
+  async createQueue(queue: InsertQueue): Promise<Queue> {
+    const [created] = await db.insert(queues).values(queue as any).returning();
+    return created;
+  }
+
+  async updateQueue(id: string, queue: Partial<InsertQueue>): Promise<Queue | undefined> {
+    const [updated] = await db.update(queues).set(queue as any).where(eq(queues.id, id)).returning();
+    return updated;
+  }
+
+  async deleteQueue(id: string): Promise<void> {
+    await db.delete(queues).where(eq(queues.id, id));
   }
 
   async getCallLogs(companyId?: string): Promise<CallLog[]> {

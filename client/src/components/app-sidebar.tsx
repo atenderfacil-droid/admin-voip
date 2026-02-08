@@ -39,6 +39,7 @@ const telephonyNav = [
   { title: "Ramais", url: "/extensions", icon: Phone },
   { title: "Troncos SIP", url: "/sip-trunks", icon: Globe },
   { title: "IVR / URA", url: "/ivr", icon: AudioLines },
+  { title: "Filas", url: "/queues", icon: Users },
 ];
 
 const systemNav = [

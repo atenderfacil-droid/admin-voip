@@ -13,26 +13,29 @@ import {
   HardDrive,
   ArrowUpRight,
   ArrowDownRight,
+  Plug,
+  Users,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Server as ServerType, Company, Extension, SipTrunk, CallLog } from "@shared/schema";
+import { Button } from "@/components/ui/button";
+import type { Server as ServerType, Company, Extension, SipTrunk, CallLog, Queue } from "@shared/schema";
 
 function StatCard({
   title,
   value,
   icon: Icon,
   description,
-  trend,
   testId,
 }: {
   title: string;
   value: string | number;
   icon: any;
   description?: string;
-  trend?: { value: number; positive: boolean };
   testId: string;
 }) {
   return (
@@ -46,22 +49,8 @@ function StatCard({
               <span className="text-[11px] text-muted-foreground">{description}</span>
             )}
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center justify-center w-10 h-10 rounded-md bg-primary/10">
-              <Icon className="w-5 h-5 text-primary" />
-            </div>
-            {trend && (
-              <div className="flex items-center gap-1">
-                {trend.positive ? (
-                  <ArrowUpRight className="w-3 h-3 text-emerald-500" />
-                ) : (
-                  <ArrowDownRight className="w-3 h-3 text-red-500" />
-                )}
-                <span className={`text-[11px] font-medium ${trend.positive ? "text-emerald-500" : "text-red-500"}`}>
-                  {trend.value}%
-                </span>
-              </div>
-            )}
+          <div className="flex items-center justify-center w-10 h-10 rounded-md bg-primary/10">
+            <Icon className="w-5 h-5 text-primary" />
           </div>
         </div>
       </CardContent>
@@ -84,6 +73,17 @@ function ServerStatusCard({ server }: { server: ServerType }) {
     error: "Erro",
   };
 
+  const { data: amiStatus, isLoading: loadingAmi, refetch } = useQuery({
+    queryKey: ["/api/servers", server.id, "ami", "core-status"],
+    queryFn: async () => {
+      const res = await fetch(`/api/servers/${server.id}/ami/core-status`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!server.amiEnabled,
+    refetchInterval: 60000,
+  });
+
   return (
     <Card data-testid={`server-card-${server.id}`}>
       <CardContent className="p-5">
@@ -93,47 +93,79 @@ function ServerStatusCard({ server }: { server: ServerType }) {
             <span className="text-sm font-semibold">{server.name}</span>
           </div>
           <div className="flex items-center gap-1.5">
+            {server.amiEnabled && (
+              <Badge variant="outline" className="text-[10px] border-emerald-500/50 text-emerald-600 dark:text-emerald-400 mr-1">
+                <Plug className="w-2.5 h-2.5 mr-0.5" /> AMI
+              </Badge>
+            )}
             <div className={`w-2 h-2 rounded-full ${statusColor[server.status]}`} />
             <span className="text-[11px] text-muted-foreground">{statusLabel[server.status]}</span>
           </div>
         </div>
 
-        <div className="space-y-3">
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                <Cpu className="w-3 h-3" /> CPU
-              </span>
-              <span className="text-[11px] font-medium">{server.cpuUsage}%</span>
+        {server.amiEnabled && amiStatus ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="p-2 rounded-md bg-muted/50">
+                <span className="text-[10px] text-muted-foreground block">Versão</span>
+                <span className="text-xs font-medium">{amiStatus.version || "N/A"}</span>
+              </div>
+              <div className="p-2 rounded-md bg-muted/50">
+                <span className="text-[10px] text-muted-foreground block">Uptime</span>
+                <span className="text-xs font-medium">{amiStatus.uptime || "N/A"}</span>
+              </div>
             </div>
-            <Progress value={server.cpuUsage} className="h-1.5" />
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center justify-between pt-1">
               <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                <HardDrive className="w-3 h-3" /> Memória
+                <Activity className="w-3 h-3" /> Chamadas Ativas
               </span>
-              <span className="text-[11px] font-medium">{server.memoryUsage}%</span>
+              <span className="text-[11px] font-medium">{amiStatus.currentCalls ?? 0}</span>
             </div>
-            <Progress value={server.memoryUsage} className="h-1.5" />
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <Clock className="w-3 h-3" /> Último Reload
+              </span>
+              <span className="text-[11px] font-medium">{amiStatus.reloadDate || "N/A"}</span>
+            </div>
           </div>
-          <div className="flex items-center justify-between pt-1">
-            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-              <Activity className="w-3 h-3" /> Canais
-            </span>
-            <span className="text-[11px] font-medium">
-              {server.activeChannels}/{server.maxChannels}
-            </span>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <Cpu className="w-3 h-3" /> CPU
+                </span>
+                <span className="text-[11px] font-medium">{server.cpuUsage}%</span>
+              </div>
+              <Progress value={server.cpuUsage} className="h-1.5" />
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <HardDrive className="w-3 h-3" /> Memória
+                </span>
+                <span className="text-[11px] font-medium">{server.memoryUsage}%</span>
+              </div>
+              <Progress value={server.memoryUsage} className="h-1.5" />
+            </div>
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <Activity className="w-3 h-3" /> Canais
+              </span>
+              <span className="text-[11px] font-medium">
+                {server.activeChannels}/{server.maxChannels}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <Clock className="w-3 h-3" /> Uptime
+              </span>
+              <span className="text-[11px] font-medium">{server.uptime || "N/A"}</span>
+            </div>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-              <Clock className="w-3 h-3" /> Uptime
-            </span>
-            <span className="text-[11px] font-medium">{server.uptime || "N/A"}</span>
-          </div>
-        </div>
+        )}
 
-        <div className="flex items-center gap-2 mt-4 pt-3 border-t">
+        <div className="flex items-center gap-2 mt-4 pt-3 border-t flex-wrap">
           <Badge variant="outline" className="text-[10px]">{server.ipAddress}</Badge>
           <Badge variant="outline" className="text-[10px]">{server.asteriskVersion || "N/A"}</Badge>
           <Badge variant="secondary" className="text-[10px]">
@@ -201,8 +233,8 @@ function RecentCallsCard({ calls }: { calls: CallLog[] }) {
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[1, 2, 3, 4].map((i) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        {[1, 2, 3, 4, 5].map((i) => (
           <Card key={i}>
             <CardContent className="p-5">
               <Skeleton className="h-4 w-20 mb-2" />
@@ -236,14 +268,19 @@ export default function Dashboard() {
   const { data: calls, isLoading: loadingCalls } = useQuery<CallLog[]>({
     queryKey: ["/api/call-logs"],
   });
+  const { data: queuesList } = useQuery<Queue[]>({
+    queryKey: ["/api/queues"],
+  });
 
   const isLoading = loadingServers || loadingCompanies || loadingExtensions || loadingTrunks || loadingCalls;
 
   if (isLoading) return <DashboardSkeleton />;
 
   const activeServers = servers?.filter((s) => s.status === "online").length || 0;
+  const amiServers = servers?.filter((s) => s.amiEnabled).length || 0;
   const activeExtensions = extensions?.filter((e) => e.status === "active").length || 0;
   const registeredTrunks = trunks?.filter((t) => t.status === "registered").length || 0;
+  const activeQueues = queuesList?.filter((q) => q.active).length || 0;
 
   return (
     <div className="space-y-6" data-testid="page-dashboard">
@@ -252,13 +289,12 @@ export default function Dashboard() {
         <p className="text-sm text-muted-foreground">Visão geral do sistema Admin VOIP</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
-          title="Servidores Ativos"
+          title="Servidores"
           value={activeServers}
           icon={Server}
-          description={`${servers?.length || 0} total`}
-          trend={{ value: 12, positive: true }}
+          description={`${servers?.length || 0} total | ${amiServers} AMI`}
           testId="stat-servers"
         />
         <StatCard
@@ -266,15 +302,13 @@ export default function Dashboard() {
           value={companies?.length || 0}
           icon={Building2}
           description={`${companies?.filter((c) => c.active).length || 0} ativas`}
-          trend={{ value: 8, positive: true }}
           testId="stat-companies"
         />
         <StatCard
-          title="Ramais Ativos"
+          title="Ramais"
           value={activeExtensions}
           icon={Phone}
           description={`${extensions?.length || 0} total`}
-          trend={{ value: 5, positive: true }}
           testId="stat-extensions"
         />
         <StatCard
@@ -282,8 +316,14 @@ export default function Dashboard() {
           value={registeredTrunks}
           icon={Globe}
           description={`${trunks?.length || 0} configurados`}
-          trend={{ value: 3, positive: true }}
           testId="stat-trunks"
+        />
+        <StatCard
+          title="Filas"
+          value={activeQueues}
+          icon={Users}
+          description={`${queuesList?.length || 0} total`}
+          testId="stat-queues"
         />
       </div>
 

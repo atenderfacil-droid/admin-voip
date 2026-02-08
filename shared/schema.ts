@@ -10,6 +10,7 @@ export const extensionStatusEnum = pgEnum("extension_status", ["active", "inacti
 export const trunkStatusEnum = pgEnum("trunk_status", ["registered", "unregistered", "failed", "disabled"]);
 export const ivrStatusEnum = pgEnum("ivr_status", ["active", "inactive", "draft"]);
 export const companyTypeEnum = pgEnum("company_type", ["master", "tenant", "dedicated"]);
+export const queueStrategyEnum = pgEnum("queue_strategy", ["ringall", "leastrecent", "fewestcalls", "random", "rrmemory", "linear", "wrandom"]);
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -51,6 +52,10 @@ export const servers = pgTable("servers", {
   memoryUsage: integer("memory_usage").notNull().default(0),
   uptime: text("uptime"),
   companyId: varchar("company_id"),
+  amiPort: integer("ami_port").notNull().default(5038),
+  amiUsername: text("ami_username"),
+  amiPassword: text("ami_password"),
+  amiEnabled: boolean("ami_enabled").notNull().default(false),
 });
 
 export const extensions = pgTable("extensions", {
@@ -100,6 +105,26 @@ export const ivrMenus = pgTable("ivr_menus", {
   serverId: varchar("server_id").notNull(),
 });
 
+export const queues = pgTable("queues", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  displayName: text("display_name").notNull(),
+  strategy: queueStrategyEnum("strategy").notNull().default("ringall"),
+  timeout: integer("timeout").notNull().default(30),
+  wrapupTime: integer("wrapup_time").notNull().default(5),
+  maxWaitTime: integer("max_wait_time").notNull().default(300),
+  maxCallers: integer("max_callers").notNull().default(10),
+  musicOnHold: text("music_on_hold").notNull().default("default"),
+  announce: text("announce"),
+  announceFrequency: integer("announce_frequency").notNull().default(30),
+  joinEmpty: boolean("join_empty").notNull().default(false),
+  leaveWhenEmpty: boolean("leave_when_empty").notNull().default(true),
+  members: jsonb("members").$type<QueueMember[]>().notNull().default([]),
+  active: boolean("active").notNull().default(true),
+  companyId: varchar("company_id").notNull(),
+  serverId: varchar("server_id").notNull(),
+});
+
 export const callLogs = pgTable("call_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   callDate: timestamp("call_date").notNull().defaultNow(),
@@ -119,12 +144,20 @@ export interface IvrOption {
   label: string;
 }
 
+export interface QueueMember {
+  interface: string;
+  memberName: string;
+  penalty: number;
+  paused: boolean;
+}
+
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertCompanySchema = createInsertSchema(companies).omit({ id: true });
 export const insertServerSchema = createInsertSchema(servers).omit({ id: true });
 export const insertExtensionSchema = createInsertSchema(extensions).omit({ id: true });
 export const insertSipTrunkSchema = createInsertSchema(sipTrunks).omit({ id: true });
 export const insertIvrMenuSchema = createInsertSchema(ivrMenus).omit({ id: true });
+export const insertQueueSchema = createInsertSchema(queues).omit({ id: true });
 export const insertCallLogSchema = createInsertSchema(callLogs).omit({ id: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -139,5 +172,7 @@ export type InsertSipTrunk = z.infer<typeof insertSipTrunkSchema>;
 export type SipTrunk = typeof sipTrunks.$inferSelect;
 export type InsertIvrMenu = z.infer<typeof insertIvrMenuSchema>;
 export type IvrMenu = typeof ivrMenus.$inferSelect;
+export type InsertQueue = z.infer<typeof insertQueueSchema>;
+export type Queue = typeof queues.$inferSelect;
 export type InsertCallLog = z.infer<typeof insertCallLogSchema>;
 export type CallLog = typeof callLogs.$inferSelect;
