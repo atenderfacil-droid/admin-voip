@@ -30,18 +30,24 @@ client/src/
     companies.tsx      - Company/tenant management (CRUD)
     servers.tsx        - Asterisk server management (CRUD)
     extensions.tsx     - SIP extensions/ramais management (CRUD + real-time AMI status)
+    online-calls.tsx   - Chamadas ativas com hangup individual e MixMonitor
     sip-trunks.tsx     - SIP trunk configuration (CRUD)
     ivr.tsx            - IVR/URA menu management (CRUD)
     queues.tsx         - Queue management (CRUD + real-time AMI status)
     call-logs.tsx      - CDR (Call Detail Records) viewer with real-time AMI capture, filters and pagination
+    dids.tsx           - DID/DDR management (CRUD) with business hours routing
+    caller-id-rules.tsx - CallerID rules management (CRUD) with pattern matching
+    reports.tsx        - Call reports with charts (hourly/disposition/daily) and CSV/PDF export
+    recordings.tsx     - Call recordings browser via SSH (list/play/download/delete)
+    firewall.tsx       - Fail2ban + IPTables security visualization via SSH
     integrations.tsx   - Device compatibility, SIP providers, API docs
     settings.tsx       - Platform configuration settings
     users.tsx          - Gestão de usuários do sistema (CRUD)
 server/
   index.ts             - Express server entry point
-  routes.ts            - All API routes (auth + CRUD + AMI)
+  routes.ts            - All API routes (auth + CRUD + AMI + SSH recordings/firewall)
   asterisk.ts          - AsteriskAMI service (TCP socket AMI client)
-  ssh-config.ts        - Remote AMI configuration via SSH tunnel
+  ssh-config.ts        - Remote AMI configuration via SSH tunnel + exported SSH utilities
   storage.ts           - Database storage layer (IStorage interface)
   db.ts                - Database connection (Drizzle + pg)
   seed.ts              - Seed data for initial setup
@@ -59,14 +65,23 @@ shared/
 - Asterisk server management with full AMI integration (shared/dedicated modes)
 - **AMI Integration**: Real-time connection to Asterisk via TCP socket on port 5038
   - Test connection, CoreStatus, CoreSettings, SIP/PJSIP peers
-  - Active channels with hangup capability
+  - Active channels with hangup capability (individual + mass hangup with regex)
   - Queue status with member management (add/remove/pause)
   - Voicemail users list, SIP registrations
   - Reload Asterisk, CLI command execution
   - Originate calls, redirect channels, monitoring
+  - MixMonitor start/stop for call recording
+  - PJSIPShowEndpoint with ActiveChannels
+- **Asterisk 22 LTS Features**:
+  - CoreProcessedCalls field in CoreStatus (displayed in dashboard)
+  - SHA-256 and SHA-512/256 authentication digest support
+  - MixMonitor stereo recording option
+  - Mass hangup with regex/glob pattern matching
 - SIP extension management with voicemail and call recording
 - SIP trunk configuration for VoIP providers
 - IVR/URA menu builder with multi-level options
+- **DID/DDR Management**: Inbound number routing with business hours and after-hours destinations
+- **CallerID Rules**: Pattern matching and manipulation (set/prefix/suffix/remove_prefix/block)
 - **Queue management** (CRUD + real-time AMI queue status)
 - **CDR Integration**: Real-time call detail records captured via AMI Event: Cdr
   - Persistent CDR listeners auto-start at boot for all AMI-enabled servers
@@ -74,6 +89,16 @@ shared/
   - Server-side filtering by date range, server, disposition, search text
   - Pagination with configurable page size
   - Full Asterisk CDR fields (clid, channel, dstchannel, disposition, billsec, uniqueid, etc.)
+- **Reports**: Call summary with charts (hourly/disposition/daily) built with divs+Tailwind, CSV/PDF export
+- **Call Recordings**: Browse, play, download, and delete recording files from Asterisk servers via SSH
+  - Scans multiple Asterisk recording directories
+  - Inline HTML5 audio playback
+  - Date and filename search filters with pagination
+- **Firewall/Security**: Fail2ban and IPTables visualization via SSH
+  - Security overview: Fail2ban version, rules count, failed logins, open SIP ports
+  - Fail2ban jail status with banned IPs and unban capability
+  - IPTables chain listing with rules detail
+  - Recent auth log viewer
 - Integration documentation (softphones, IP phones, SIP providers, API)
 - Dark/light theme support
 - Responsive design
@@ -85,7 +110,7 @@ shared/
 - **viewer**: Apenas visualização dentro da própria empresa
 
 ## Database Models
-- users, companies, servers (with AMI fields), extensions, sipTrunks, ivrMenus, queues, callLogs
+- users, companies, servers (with AMI + SSH fields), extensions, sipTrunks, ivrMenus, queues, callLogs, dids, callerIdRules
 
 ## API Endpoints
 All prefixed with `/api/`:
@@ -100,7 +125,10 @@ All prefixed with `/api/`:
 - `/sip-trunks` - CRUD
 - `/ivr-menus` - CRUD
 - `/queues` - CRUD
+- `/dids` - CRUD
+- `/caller-id-rules` - CRUD
 - `/call-logs` - GET only
+- `/reports/calls-summary` - GET call summary data for reports
 - `/servers/:id/ami/test` - POST test AMI connection
 - `/servers/:id/ami/status` - GET full AMI status
 - `/servers/:id/ami/core-status` - GET Asterisk core status
@@ -115,12 +143,24 @@ All prefixed with `/api/`:
 - `/servers/:id/ami/command` - POST execute CLI command
 - `/servers/:id/ami/originate` - POST originate call
 - `/servers/:id/ami/hangup` - POST hangup channel
+- `/servers/:id/ami/hangup-multiple` - POST mass hangup with regex/glob patterns
+- `/servers/:id/ami/mixmonitor` - POST start MixMonitor recording
+- `/servers/:id/ami/stopmixmonitor` - POST stop MixMonitor recording
 - `/servers/:id/ami/queue-add` - POST add member to queue
 - `/servers/:id/ami/queue-remove` - POST remove member from queue
 - `/servers/:id/ami/queue-pause` - POST pause/unpause queue member
 - `/servers/:id/ami/extension-state/:exten/:context` - GET extension state
 - `/servers/:id/ami/redirect` - POST redirect channel
 - `/servers/:id/ami/monitor` - POST start monitoring
+- `/servers/:id/ami/pjsip-endpoint/:endpoint` - GET PJSIP endpoint details
+- `/servers/:id/ami/pjsip-endpoints` - GET all PJSIP endpoints
+- `/servers/:id/recordings` - GET list recordings via SSH
+- `/servers/:id/recordings/download` - GET stream/download recording file via SSH
+- `/servers/:id/recordings` - DELETE remove recording file via SSH (admin only)
+- `/servers/:id/firewall/fail2ban` - GET Fail2ban status via SSH
+- `/servers/:id/firewall/fail2ban/unban` - POST unban IP from Fail2ban jail
+- `/servers/:id/firewall/iptables` - GET IPTables rules via SSH
+- `/servers/:id/firewall/overview` - GET security overview via SSH
 
 ## Running
 - `npm run dev` starts Express + Vite on port 5000
