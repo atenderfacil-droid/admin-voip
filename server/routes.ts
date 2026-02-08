@@ -463,6 +463,31 @@ export async function registerRoutes(
     res.json(logs);
   });
 
+  // Self-profile update (any authenticated user can edit their own profile)
+  app.patch("/api/users/me", async (req, res) => {
+    const authUser = getAuthUser(req);
+    const allowedFields = ["fullName", "email", "password"];
+    const body: any = {};
+    for (const key of allowedFields) {
+      if (req.body[key] !== undefined && req.body[key] !== "") {
+        body[key] = req.body[key];
+      }
+    }
+    if (Object.keys(body).length === 0) {
+      return res.status(400).json({ message: "Nenhum dado para atualizar" });
+    }
+    try {
+      if (body.password) {
+        body.password = await bcrypt.hash(body.password, 10);
+      }
+      const user = await storage.updateUser(authUser.id, body);
+      if (!user) return res.status(404).json({ message: "Usuário não encontrado" });
+      res.json(excludePassword(user));
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   // Users CRUD (admin+ only, multi-tenant enforced)
   app.get("/api/users", async (req, res) => {
     if (!isAdminOrAbove(req)) {

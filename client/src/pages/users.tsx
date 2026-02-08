@@ -30,17 +30,25 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { User, Company } from "@shared/schema";
 
-const userFormSchema = z.object({
+const userFormSchemaBase = z.object({
   username: z.string().min(3, "Usuário deve ter pelo menos 3 caracteres"),
   fullName: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
   email: z.string().email("E-mail inválido"),
-  password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres").optional().or(z.literal("")),
+  password: z.string().optional().or(z.literal("")),
   role: z.enum(["super_admin", "admin", "operator", "viewer"]),
   companyId: z.string().min(1, "Selecione uma empresa"),
   active: z.boolean().default(true),
 });
 
-type UserForm = z.infer<typeof userFormSchema>;
+const userCreateSchema = userFormSchemaBase.extend({
+  password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
+});
+
+const userEditSchema = userFormSchemaBase.extend({
+  password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres").optional().or(z.literal("")),
+});
+
+type UserForm = z.infer<typeof userFormSchemaBase>;
 
 const roleLabels: Record<string, string> = {
   super_admin: "Super Admin",
@@ -75,11 +83,7 @@ export default function UsersPage() {
   });
 
   const form = useForm<UserForm>({
-    resolver: zodResolver(
-      editingUser
-        ? userFormSchema.extend({ password: z.string().optional().or(z.literal("")) })
-        : userFormSchema.extend({ password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres") })
-    ),
+    resolver: zodResolver(editingUser ? userEditSchema : userCreateSchema),
     defaultValues: {
       username: "",
       fullName: "",
@@ -351,26 +355,26 @@ export default function UsersPage() {
                     <span className="text-[11px] text-muted-foreground">@{user.username}</span>
                   </div>
                 </div>
-                {currentUser?.id !== user.id && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" data-testid={`button-menu-user-${user.id}`}>
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openEdit(user)}>
-                        <Edit className="w-4 h-4 mr-2" /> Editar
-                      </DropdownMenuItem>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" data-testid={`button-menu-user-${user.id}`}>
+                      <MoreHorizontal className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => openEdit(user)}>
+                      <Edit className="w-4 h-4 mr-2" /> Editar
+                    </DropdownMenuItem>
+                    {currentUser?.id !== user.id && (
                       <DropdownMenuItem
                         onClick={() => deleteMutation.mutate(user.id)}
                         className="text-destructive"
                       >
                         <Trash2 className="w-4 h-4 mr-2" /> Remover
                       </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               <div className="space-y-1">
