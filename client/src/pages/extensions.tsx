@@ -21,6 +21,14 @@ import {
   ServerCog,
   ChevronDown,
   ChevronUp,
+  Wifi,
+  WifiOff,
+  Globe,
+  Clock,
+  Monitor,
+  Activity,
+  Signal,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,6 +42,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Extension, Company, Server as ServerType } from "@shared/schema";
@@ -79,17 +88,35 @@ interface ServerExtension {
   existingId?: string;
 }
 
-const statusConfig: Record<string, { color: string; bg: string; label: string; icon: any }> = {
-  active: { color: "text-emerald-500", bg: "bg-emerald-500", label: "Ativo", icon: PhoneCall },
-  inactive: { color: "text-muted-foreground", bg: "bg-muted-foreground", label: "Inativo", icon: PhoneOff },
-  busy: { color: "text-amber-500", bg: "bg-amber-500", label: "Ocupado", icon: Phone },
-  unavailable: { color: "text-red-500", bg: "bg-red-500", label: "Indisponível", icon: PhoneOff },
+interface LiveStatusEntry {
+  status: string;
+  ipAddress: string;
+  port: string;
+  latency: string;
+  userAgent: string;
+  protocol: string;
+  activeChannels: string;
+  rawStatus: string;
+  serverId: string;
+  serverName: string;
+}
+
+type LiveStatusMap = Record<string, LiveStatusEntry>;
+
+const statusConfig: Record<string, { color: string; bg: string; bgCard: string; label: string; icon: any }> = {
+  active: { color: "text-emerald-500", bg: "bg-emerald-500", bgCard: "border-l-emerald-500", label: "Online", icon: PhoneCall },
+  inactive: { color: "text-muted-foreground", bg: "bg-muted-foreground", bgCard: "border-l-muted-foreground", label: "Offline", icon: PhoneOff },
+  busy: { color: "text-amber-500", bg: "bg-amber-500", bgCard: "border-l-amber-500", label: "Em Chamada", icon: Phone },
+  unavailable: { color: "text-red-500", bg: "bg-red-500", bgCard: "border-l-red-500", label: "Indisponível", icon: WifiOff },
 };
+
+type StatusFilter = "all" | "active" | "inactive" | "busy" | "unavailable";
 
 export default function Extensions() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Extension | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [fetchOpen, setFetchOpen] = useState(false);
   const [fetchServerId, setFetchServerId] = useState("");
   const [serverExtensions, setServerExtensions] = useState<ServerExtension[]>([]);
@@ -108,20 +135,36 @@ export default function Extensions() {
     queryKey: ["/api/servers"],
   });
 
-  type LiveStatusMap = Record<string, { status: string; ipAddress: string; serverId: string; serverName: string }>;
-
-  const { data: liveStatus } = useQuery<LiveStatusMap>({
+  const { data: liveStatus, dataUpdatedAt, isRefetching: isRefetchingLive } = useQuery<LiveStatusMap>({
     queryKey: ["/api/extensions/live-status"],
     refetchInterval: 15000,
   });
 
-  const getLiveStatus = useCallback((ext: Extension): string => {
-    if (!liveStatus || !ext.serverId) return ext.status;
+  const getLiveInfo = useCallback((ext: Extension): LiveStatusEntry | null => {
+    if (!liveStatus || !ext.serverId) return null;
     const key = `${ext.serverId}:${ext.number}`;
-    const live = liveStatus[key];
-    if (live) return live.status;
-    return ext.status;
+    return liveStatus[key] || null;
   }, [liveStatus]);
+
+  const getLiveStatus = useCallback((ext: Extension): string => {
+    const info = getLiveInfo(ext);
+    if (info) return info.status;
+    return ext.status;
+  }, [getLiveInfo]);
+
+  const statusCounts = useMemo(() => {
+    const counts = { total: 0, active: 0, inactive: 0, busy: 0, unavailable: 0 };
+    if (!extensions) return counts;
+    counts.total = extensions.length;
+    for (const ext of extensions) {
+      const st = getLiveStatus(ext);
+      if (st === "active") counts.active++;
+      else if (st === "busy") counts.busy++;
+      else if (st === "unavailable") counts.unavailable++;
+      else counts.inactive++;
+    }
+    return counts;
+  }, [extensions, getLiveStatus]);
 
   const amiServers = servers?.filter((s) => s.amiEnabled) || [];
 
@@ -391,18 +434,33 @@ export default function Extensions() {
     });
   };
 
-  const filtered = extensions?.filter(
-    (e) =>
-      e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      e.number.includes(searchTerm)
-  );
+  const filtered = useMemo(() => {
+    if (!extensions) return [];
+    return extensions.filter((e) => {
+      const matchesSearch = e.name.toLowerCase().includes(searchTerm.toLowerCase()) || e.number.includes(searchTerm);
+      if (!matchesSearch) return false;
+      if (statusFilter === "all") return true;
+      const st = getLiveStatus(e);
+      return st === statusFilter;
+    });
+  }, [extensions, searchTerm, statusFilter, getLiveStatus]);
 
   const getCompanyName = (id: string) => companies?.find((c) => c.id === id)?.name || "—";
+  const getServerName = (id: string) => servers?.find((s) => s.id === id)?.name || "—";
+
+  const lastUpdateStr = useMemo(() => {
+    if (!dataUpdatedAt) return "";
+    const d = new Date(dataUpdatedAt);
+    return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }, [dataUpdatedAt]);
 
   if (isLoading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-48" />
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-20" />)}
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-40" />)}
         </div>
@@ -418,6 +476,22 @@ export default function Extensions() {
           <p className="text-sm text-muted-foreground">Gerencie os ramais SIP dos seus servidores</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {lastUpdateStr && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mr-2">
+                  {isRefetchingLive ? (
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Activity className="w-3 h-3" />
+                  )}
+                  <span data-testid="text-last-update">{lastUpdateStr}</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>Última atualização do status em tempo real (atualiza a cada 15s)</TooltipContent>
+            </Tooltip>
+          )}
+
           <Dialog open={fetchOpen} onOpenChange={(v) => { setFetchOpen(v); if (!v) { setServerExtensions([]); setSelectedForImport(new Set()); } }}>
             <DialogTrigger asChild>
               <Button variant="outline" data-testid="button-fetch-extensions">
@@ -895,82 +969,253 @@ export default function Extensions() {
         </div>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar ramais..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-9"
-          data-testid="input-search-extensions"
-        />
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3" data-testid="status-summary-cards">
+        <Card
+          className={`cursor-pointer transition-colors ${statusFilter === "all" ? "ring-2 ring-primary" : ""}`}
+          onClick={() => setStatusFilter("all")}
+          data-testid="filter-all"
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] text-muted-foreground font-medium">Total</p>
+                <p className="text-2xl font-bold">{statusCounts.total}</p>
+              </div>
+              <div className="flex items-center justify-center w-10 h-10 rounded-md bg-primary/10">
+                <Phone className="w-5 h-5 text-primary" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className={`cursor-pointer transition-colors ${statusFilter === "active" ? "ring-2 ring-emerald-500" : ""}`}
+          onClick={() => setStatusFilter("active")}
+          data-testid="filter-active"
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] text-muted-foreground font-medium">Online</p>
+                <p className="text-2xl font-bold text-emerald-500">{statusCounts.active}</p>
+              </div>
+              <div className="flex items-center justify-center w-10 h-10 rounded-md bg-emerald-500/10">
+                <Wifi className="w-5 h-5 text-emerald-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className={`cursor-pointer transition-colors ${statusFilter === "busy" ? "ring-2 ring-amber-500" : ""}`}
+          onClick={() => setStatusFilter("busy")}
+          data-testid="filter-busy"
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] text-muted-foreground font-medium">Em Chamada</p>
+                <p className="text-2xl font-bold text-amber-500">{statusCounts.busy}</p>
+              </div>
+              <div className="flex items-center justify-center w-10 h-10 rounded-md bg-amber-500/10">
+                <PhoneCall className="w-5 h-5 text-amber-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className={`cursor-pointer transition-colors ${statusFilter === "unavailable" ? "ring-2 ring-red-500" : ""}`}
+          onClick={() => setStatusFilter("unavailable")}
+          data-testid="filter-unavailable"
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] text-muted-foreground font-medium">Indisponível</p>
+                <p className="text-2xl font-bold text-red-500">{statusCounts.unavailable}</p>
+              </div>
+              <div className="flex items-center justify-center w-10 h-10 rounded-md bg-red-500/10">
+                <WifiOff className="w-5 h-5 text-red-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className={`cursor-pointer transition-colors ${statusFilter === "inactive" ? "ring-2 ring-muted-foreground" : ""}`}
+          onClick={() => setStatusFilter("inactive")}
+          data-testid="filter-inactive"
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] text-muted-foreground font-medium">Offline</p>
+                <p className="text-2xl font-bold text-muted-foreground">{statusCounts.inactive}</p>
+              </div>
+              <div className="flex items-center justify-center w-10 h-10 rounded-md bg-muted">
+                <PhoneOff className="w-5 h-5 text-muted-foreground" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar ramais..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9"
+            data-testid="input-search-extensions"
+          />
+        </div>
+        {statusFilter !== "all" && (
+          <Button variant="ghost" size="sm" onClick={() => setStatusFilter("all")} data-testid="button-clear-filter">
+            Limpar filtro
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered?.map((ext) => {
+        {filtered.map((ext) => {
           const realStatus = getLiveStatus(ext);
           const config = statusConfig[realStatus] || statusConfig.inactive;
+          const liveInfo = getLiveInfo(ext);
+          const isOnline = realStatus === "active" || realStatus === "busy";
+          const StatusIcon = config.icon;
           return (
-            <Card key={ext.id} className="hover-elevate" data-testid={`card-ext-${ext.id}`}>
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center w-10 h-10 rounded-md bg-primary/10">
-                      <Phone className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold">{ext.number}</h3>
-                        <div className={`w-2 h-2 rounded-full ${config.bg}`} data-testid={`status-dot-${ext.id}`} />
+            <Card key={ext.id} className="hover-elevate overflow-visible" data-testid={`card-ext-${ext.id}`}>
+              <CardContent className="p-0">
+                <div className={`border-l-4 rounded-l-md ${config.bgCard} p-5`}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`relative flex items-center justify-center w-10 h-10 rounded-md ${isOnline ? "bg-emerald-500/10" : "bg-muted"}`}>
+                        <Phone className={`w-5 h-5 ${isOnline ? "text-emerald-500" : "text-muted-foreground"}`} />
+                        <div
+                          className={`absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background ${config.bg}`}
+                          data-testid={`status-dot-${ext.id}`}
+                        />
                       </div>
-                      <span className="text-[11px] text-muted-foreground">{ext.name}</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-semibold">{ext.number}</h3>
+                          <Badge variant="outline" className="text-[10px]">{ext.protocol}</Badge>
+                        </div>
+                        <span className="text-[11px] text-muted-foreground">{ext.name}</span>
+                      </div>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openEdit(ext)}>
+                          <Edit className="w-4 h-4 mr-2" /> Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => deleteMutation.mutate(ext.id)} className="text-destructive">
+                          <Trash2 className="w-4 h-4 mr-2" /> Remover
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  <div className="space-y-2 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <span>Empresa: <span className="font-medium text-foreground">{getCompanyName(ext.companyId)}</span></span>
+                      <span>Servidor: <span className="font-medium text-foreground">{getServerName(ext.serverId)}</span></span>
+                    </div>
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <span>Contexto: <span className="font-medium">{ext.context}</span></span>
                     </div>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openEdit(ext)}>
-                        <Edit className="w-4 h-4 mr-2" /> Editar
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => deleteMutation.mutate(ext.id)} className="text-destructive">
-                        <Trash2 className="w-4 h-4 mr-2" /> Remover
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
 
-                <div className="space-y-1.5 text-xs text-muted-foreground">
-                  <p>Empresa: <span className="font-medium text-foreground">{getCompanyName(ext.companyId)}</span></p>
-                  <p>Protocolo: <span className="font-medium">{ext.protocol}</span> | Contexto: <span className="font-medium">{ext.context}</span></p>
-                </div>
+                  {isOnline && liveInfo && (
+                    <div className="mt-3 pt-3 border-t border-border/50">
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+                        {liveInfo.ipAddress && liveInfo.ipAddress !== "-" && (
+                          <div className="flex items-center gap-1.5" data-testid={`info-ip-${ext.id}`}>
+                            <Globe className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                            <span className="text-muted-foreground">IP:</span>
+                            <span className="font-mono font-medium text-foreground truncate">{liveInfo.ipAddress}{liveInfo.port !== "5060" ? `:${liveInfo.port}` : ""}</span>
+                          </div>
+                        )}
 
-                <div className="flex items-center gap-2 mt-3 pt-3 border-t flex-wrap">
-                  <Badge variant={realStatus === "active" ? "default" : realStatus === "busy" ? "default" : "secondary"} className="text-[10px]" data-testid={`badge-status-${ext.id}`}>
-                    {config.label}
-                  </Badge>
-                  {ext.voicemailEnabled && (
-                    <Badge variant="outline" className="text-[10px]">
-                      <Voicemail className="w-3 h-3 mr-1" /> Voicemail
-                    </Badge>
+                        {liveInfo.latency && liveInfo.latency !== "-" && (
+                          <div className="flex items-center gap-1.5" data-testid={`info-latency-${ext.id}`}>
+                            <Signal className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                            <span className="text-muted-foreground">Latência:</span>
+                            <span className="font-medium text-emerald-500">{liveInfo.latency}</span>
+                          </div>
+                        )}
+
+                        {liveInfo.userAgent && liveInfo.userAgent !== "-" && (
+                          <div className="flex items-center gap-1.5 col-span-2" data-testid={`info-useragent-${ext.id}`}>
+                            <Monitor className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                            <span className="text-muted-foreground">Dispositivo:</span>
+                            <span className="font-medium text-foreground truncate">{liveInfo.userAgent}</span>
+                          </div>
+                        )}
+
+                        {liveInfo.activeChannels && liveInfo.activeChannels !== "0" && (
+                          <div className="flex items-center gap-1.5" data-testid={`info-channels-${ext.id}`}>
+                            <PhoneCall className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                            <span className="text-muted-foreground">Canais:</span>
+                            <span className="font-medium text-amber-500">{liveInfo.activeChannels}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   )}
-                  {ext.callRecording && (
-                    <Badge variant="outline" className="text-[10px]">
-                      <Mic className="w-3 h-3 mr-1" /> Gravação
-                    </Badge>
+
+                  {!isOnline && liveInfo && liveInfo.ipAddress && liveInfo.ipAddress !== "-" && (
+                    <div className="mt-3 pt-3 border-t border-border/50">
+                      <div className="text-[11px] flex items-center gap-1.5">
+                        <Globe className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                        <span className="text-muted-foreground">Último IP:</span>
+                        <span className="font-mono text-muted-foreground">{liveInfo.ipAddress}</span>
+                      </div>
+                    </div>
                   )}
+
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t flex-wrap">
+                    <Badge
+                      variant={realStatus === "active" ? "default" : realStatus === "busy" ? "default" : "secondary"}
+                      className={`text-[10px] ${realStatus === "active" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" : realStatus === "busy" ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30" : ""}`}
+                      data-testid={`badge-status-${ext.id}`}
+                    >
+                      <StatusIcon className="w-3 h-3 mr-1" />
+                      {config.label}
+                    </Badge>
+                    {ext.voicemailEnabled && (
+                      <Badge variant="outline" className="text-[10px]">
+                        <Voicemail className="w-3 h-3 mr-1" /> Voicemail
+                      </Badge>
+                    )}
+                    {ext.callRecording && (
+                      <Badge variant="outline" className="text-[10px]">
+                        <Mic className="w-3 h-3 mr-1" /> Gravação
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
           );
         })}
-        {filtered?.length === 0 && (
+        {filtered.length === 0 && (
           <div className="col-span-full text-center py-12 text-sm text-muted-foreground">
             <Phone className="w-10 h-10 mx-auto mb-3 text-muted-foreground/50" />
             <p>Nenhum ramal encontrado</p>
+            {statusFilter !== "all" && (
+              <p className="text-[11px] mt-1">
+                Tente limpar o filtro de status para ver todos os ramais
+              </p>
+            )}
           </div>
         )}
       </div>

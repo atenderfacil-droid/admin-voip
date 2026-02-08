@@ -997,7 +997,18 @@ export async function registerRoutes(
         (s) => s.amiEnabled && s.amiUsername && s.amiPassword && s.status === "online"
       );
 
-      const liveStatus: Record<string, { status: string; ipAddress: string; serverId: string; serverName: string }> = {};
+      const liveStatus: Record<string, {
+        status: string;
+        ipAddress: string;
+        port: string;
+        latency: string;
+        userAgent: string;
+        protocol: string;
+        activeChannels: string;
+        rawStatus: string;
+        serverId: string;
+        serverName: string;
+      }> = {};
 
       await Promise.all(
         amiServers.map(async (server) => {
@@ -1008,31 +1019,70 @@ export async function registerRoutes(
               ami.getPJSIPEndpoints().catch(() => []),
             ]);
 
-            for (const peer of sipPeers) {
+            const sipDetailPromises = sipPeers.map(async (peer) => {
               const name = peer.objectname;
-              if (!name) continue;
-              const statusLower = (peer.status || "").toLowerCase();
+              if (!name) return;
+              const rawStatus = peer.status || "Unknown";
+              const statusLower = rawStatus.toLowerCase();
               let normalizedStatus = "inactive";
+              let latency = "-";
+
               if (statusLower.includes("ok") || statusLower.includes("reachable")) {
                 normalizedStatus = "active";
+                const latencyMatch = rawStatus.match(/\((\d+)\s*ms\)/);
+                if (latencyMatch) latency = latencyMatch[1] + " ms";
               } else if (statusLower.includes("lagged")) {
                 normalizedStatus = "active";
+                const latencyMatch = rawStatus.match(/\((\d+)\s*ms\)/);
+                if (latencyMatch) latency = latencyMatch[1] + " ms";
               } else if (statusLower.includes("unreachable") || statusLower.includes("unreach")) {
                 normalizedStatus = "unavailable";
               } else if (statusLower.includes("unknown")) {
                 normalizedStatus = "inactive";
               }
+
+              let userAgent = "-";
+              try {
+                const { response } = await ami.executeAction(
+                  { Action: "SIPshowpeer", Peer: name },
+                  false
+                );
+                if (response) {
+                  userAgent = (response as any).sip_useragent || (response as any).useragent || (response as any).SIP_Useragent || "-";
+                  if (userAgent === "-") {
+                    const rawResp = response as Record<string, string>;
+                    for (const key of Object.keys(rawResp)) {
+                      if (key.toLowerCase().includes("useragent")) {
+                        userAgent = rawResp[key];
+                        break;
+                      }
+                    }
+                  }
+                }
+              } catch {}
+
+              const ipAddr = peer.ipaddress || "-";
+              const port = peer.ipport || "5060";
+
               liveStatus[`${server.id}:${name}`] = {
                 status: normalizedStatus,
-                ipAddress: peer.ipaddress || "-",
+                ipAddress: ipAddr !== "-" && !ipAddr.includes(":") ? ipAddr : ipAddr,
+                port: port,
+                latency,
+                userAgent,
+                protocol: "SIP",
+                activeChannels: "0",
+                rawStatus,
                 serverId: server.id,
                 serverName: server.name,
               };
-            }
+            });
 
-            for (const ep of pjsipEndpoints) {
+            await Promise.all(sipDetailPromises);
+
+            const pjsipDetailPromises = pjsipEndpoints.map(async (ep) => {
               const name = ep.objectname;
-              if (!name) continue;
+              if (!name) return;
               const deviceState = (ep.devicestate || "").toLowerCase();
               let normalizedStatus = "inactive";
               if (deviceState.includes("ringing") || deviceState.includes("busy") || (deviceState.includes("inuse") && !deviceState.includes("not_inuse"))) {
@@ -1042,13 +1092,57 @@ export async function registerRoutes(
               } else if (deviceState.includes("unavailable") || deviceState.includes("invalid")) {
                 normalizedStatus = "unavailable";
               }
+
+              let ipAddress = "-";
+              let port = "5060";
+              let userAgent = "-";
+              try {
+                const { events } = await ami.executeAction(
+                  { Action: "PJSIPShowEndpoint", Endpoint: name },
+                  true,
+                  "EndpointDetailComplete"
+                );
+                const contactEvents = events.filter((e: any) =>
+                  (e.event === "ContactStatusDetail" || e.event === "contactstatusdetail") && e.status === "Reachable"
+                );
+                if (contactEvents.length > 0) {
+                  const contact = contactEvents[0] as any;
+                  const uri = contact.uri || contact.aor || "";
+                  const uriMatch = uri.match(/@([\d.]+):(\d+)/);
+                  if (uriMatch) {
+                    ipAddress = uriMatch[1];
+                    port = uriMatch[2];
+                  } else {
+                    const ipMatch = uri.match(/@([\d.]+)/);
+                    if (ipMatch) ipAddress = ipMatch[1];
+                  }
+                  userAgent = contact.useragent || contact.user_agent || "-";
+                  if (userAgent === "-") {
+                    for (const key of Object.keys(contact)) {
+                      if (key.toLowerCase().includes("useragent") || key.toLowerCase() === "user_agent") {
+                        userAgent = contact[key];
+                        break;
+                      }
+                    }
+                  }
+                }
+              } catch {}
+
               liveStatus[`${server.id}:${name}`] = {
                 status: normalizedStatus,
-                ipAddress: "-",
+                ipAddress,
+                port,
+                latency: "-",
+                userAgent,
+                protocol: "PJSIP",
+                activeChannels: ep.activechannels || "0",
+                rawStatus: ep.devicestate || "Unknown",
                 serverId: server.id,
                 serverName: server.name,
               };
-            }
+            });
+
+            await Promise.all(pjsipDetailPromises);
           } catch (err) {
             // Server unreachable, skip
           }
