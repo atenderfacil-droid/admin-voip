@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Headphones,
   Phone,
@@ -12,6 +13,12 @@ import {
   Zap,
   ArrowRight,
   CheckCircle2,
+  AudioLines,
+  Podcast,
+  Lock,
+  RefreshCw,
+  Database,
+  Cpu,
 } from "lucide-react";
 
 const features = [
@@ -45,19 +52,70 @@ const features = [
     title: "Gestão de Usuários",
     description: "Controle de acesso com 4 níveis: Super Admin, Admin, Operador e Visualizador.",
   },
+  {
+    icon: AudioLines,
+    title: "IVR / URA",
+    description: "Crie menus de atendimento automático com fluxos personalizados e roteamento inteligente.",
+  },
+  {
+    icon: Headphones,
+    title: "Filas de Atendimento",
+    description: "Gerencie filas de chamadas com distribuição automática e monitoramento de agentes.",
+  },
+  {
+    icon: Podcast,
+    title: "Conferências",
+    description: "Salas de conferência com controle de participantes, gravação e senhas de acesso.",
+  },
+];
+
+const differentials = [
+  {
+    icon: Cpu,
+    title: "AMI Integrado",
+    description: "Conexão direta com Asterisk Manager Interface para controle total do PBX em tempo real.",
+  },
+  {
+    icon: Shield,
+    title: "Multi-Tenant",
+    description: "Isolamento completo de dados entre empresas com segregação total de recursos.",
+  },
+  {
+    icon: Lock,
+    title: "Segurança",
+    description: "Fail2ban, TLS/SRTP, controle de acesso por perfil e auditoria completa de ações.",
+  },
+  {
+    icon: RefreshCw,
+    title: "Automação",
+    description: "Backup automático, CDR em tempo real, monitoramento contínuo e alertas configuráveis.",
+  },
 ];
 
 const plans = [
   {
     name: "Multi-Tenant",
+    icon: Users,
     description: "Compartilhe a infraestrutura do servidor com custo reduzido",
     highlights: ["Até 100 ramais", "Até 10 troncos SIP", "Suporte por e-mail", "Dashboard compartilhado"],
   },
   {
     name: "Dedicado",
+    icon: Server,
     description: "Servidor exclusivo com recursos totalmente dedicados",
     highlights: ["Ramais ilimitados", "Troncos ilimitados", "Suporte prioritário", "Servidor exclusivo"],
   },
+];
+
+const technologies = [
+  "Asterisk 22 LTS",
+  "SIP/PJSIP",
+  "WebRTC",
+  "AMI Protocol",
+  "SSH",
+  "Fail2ban",
+  "PostgreSQL",
+  "React",
 ];
 
 export default function Landing() {
@@ -83,16 +141,17 @@ export default function Landing() {
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5" />
         <div className="max-w-6xl mx-auto px-6 py-20 relative">
           <div className="max-w-2xl">
-            <div className="flex items-center gap-2 mb-4">
-              <Zap className="w-4 h-4 text-primary" />
-              <span className="text-xs font-medium text-primary">Plataforma de Gerenciamento VOIP</span>
-            </div>
+            <Badge variant="secondary" className="mb-4" data-testid="badge-hero">
+              <Zap className="w-3 h-3 mr-1" />
+              Plataforma de Gerenciamento VOIP
+            </Badge>
             <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">
               Gerencie seus servidores Asterisk PBX com eficiência
             </h1>
             <p className="text-base text-muted-foreground mb-8 leading-relaxed">
               Plataforma completa para administração de centrais telefônicas Asterisk.
-              Multi-tenant, segura e com monitoramento em tempo real.
+              Multi-tenant com integração AMI nativa, segurança avançada e monitoramento
+              em tempo real de todos os seus servidores.
             </p>
             <div className="flex items-center gap-3 flex-wrap">
               <Link href="/login">
@@ -104,6 +163,11 @@ export default function Landing() {
                 onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}>
                 Ver Recursos
               </Button>
+            </div>
+            <div className="flex items-center gap-3 mt-8 flex-wrap">
+              <Badge variant="outline" data-testid="badge-stat-features">25+ Funcionalidades</Badge>
+              <Badge variant="outline" data-testid="badge-stat-asterisk">Asterisk 22 LTS</Badge>
+              <Badge variant="outline" data-testid="badge-stat-realtime">100% Real-Time</Badge>
             </div>
           </div>
         </div>
@@ -134,6 +198,30 @@ export default function Landing() {
       <section className="py-16 border-t">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-12">
+            <h2 className="text-2xl font-bold tracking-tight mb-2">Por que escolher Admin VOIP?</h2>
+            <p className="text-sm text-muted-foreground">Diferenciais que fazem a diferença na gestão do seu PBX</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            {differentials.map((item) => (
+              <Card key={item.title} className="hover-elevate" data-testid={`card-differential-${item.title.toLowerCase().replace(/\s/g, "-")}`}>
+                <CardContent className="p-5">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-md bg-primary/10">
+                      <item.icon className="w-5 h-5 text-primary" />
+                    </div>
+                    <h3 className="text-sm font-semibold">{item.title}</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{item.description}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="py-16 border-t">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="text-center mb-12">
             <h2 className="text-2xl font-bold tracking-tight mb-2">Planos de Serviço</h2>
             <p className="text-sm text-muted-foreground">Escolha o modelo ideal para sua empresa</p>
           </div>
@@ -141,9 +229,16 @@ export default function Landing() {
             {plans.map((plan) => (
               <Card key={plan.name} className="hover-elevate" data-testid={`card-plan-${plan.name.toLowerCase().replace(/\s/g, "-")}`}>
                 <CardContent className="p-6">
-                  <h3 className="text-lg font-bold mb-1">{plan.name}</h3>
-                  <p className="text-xs text-muted-foreground mb-4">{plan.description}</p>
-                  <ul className="space-y-2">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-md bg-primary/10">
+                      <plan.icon className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold">{plan.name}</h3>
+                      <p className="text-xs text-muted-foreground">{plan.description}</p>
+                    </div>
+                  </div>
+                  <ul className="space-y-2 mt-4">
                     {plan.highlights.map((item) => (
                       <li key={item} className="flex items-center gap-2 text-xs">
                         <CheckCircle2 className="w-3.5 h-3.5 text-primary flex-shrink-0" />
@@ -152,12 +247,28 @@ export default function Landing() {
                     ))}
                   </ul>
                   <Link href="/login">
-                    <Button variant="outline" className="w-full mt-4">
+                    <Button variant="outline" className="w-full mt-4" data-testid={`button-plan-${plan.name.toLowerCase().replace(/\s/g, "-")}`}>
                       Solicitar Acesso
                     </Button>
                   </Link>
                 </CardContent>
               </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="py-16 border-t">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold tracking-tight mb-2">Tecnologias Utilizadas</h2>
+            <p className="text-sm text-muted-foreground">Stack moderna e confiável para sua infraestrutura VOIP</p>
+          </div>
+          <div className="flex items-center justify-center gap-3 flex-wrap" data-testid="tech-badges">
+            {technologies.map((tech) => (
+              <Badge key={tech} variant="secondary" data-testid={`badge-tech-${tech.toLowerCase().replace(/[\s\/]/g, "-")}`}>
+                {tech}
+              </Badge>
             ))}
           </div>
         </div>
@@ -171,6 +282,9 @@ export default function Landing() {
           </div>
           <p className="text-[10px] text-muted-foreground">
             Plataforma de Gerenciamento Asterisk PBX
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            atendaja.com.br
           </p>
         </div>
       </footer>

@@ -25,6 +25,7 @@ import {
   Podcast,
   Voicemail,
   Zap,
+  User as UserIcon,
 } from "lucide-react";
 import {
   Sidebar,
@@ -38,9 +39,16 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useState, useEffect } from "react";
 
 const mainNav = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -85,6 +93,36 @@ const roleLabels: Record<string, string> = {
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (user && profileOpen) {
+      setFullName(user.fullName);
+      setEmail(user.email);
+      setNewPassword("");
+    }
+  }, [user, profileOpen]);
+
+  const profileMutation = useMutation({
+    mutationFn: async () => {
+      const body: any = { fullName, email };
+      if (newPassword) body.password = newPassword;
+      const res = await apiRequest("PATCH", "/api/users/me", body);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({ title: "Perfil atualizado com sucesso" });
+      setProfileOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Erro ao atualizar perfil", description: error.message, variant: "destructive" });
+    },
+  });
 
   return (
     <Sidebar>
@@ -170,22 +208,50 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="p-4 space-y-3">
         {user && (
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex flex-col min-w-0">
-              <span className="text-xs font-medium truncate">{user.fullName}</span>
-              <span className="text-[10px] text-muted-foreground truncate">{roleLabels[user.role]}</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={logout}
-              data-testid="button-logout"
-            >
-              <LogOut className="w-4 h-4" />
-            </Button>
-          </div>
+          <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
+            <DialogTrigger asChild>
+              <div className="flex items-center gap-2 cursor-pointer hover-elevate rounded-md p-1" data-testid="button-open-profile">
+                <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary/10">
+                  <UserIcon className="w-4 h-4 text-primary" />
+                </div>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="text-xs font-medium truncate">{user.fullName}</span>
+                  <span className="text-[10px] text-muted-foreground truncate">{roleLabels[user.role]}</span>
+                </div>
+                <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); logout(); }} data-testid="button-logout">
+                  <LogOut className="w-4 h-4" />
+                </Button>
+              </div>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Meu Perfil</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline">{roleLabels[user.role]}</Badge>
+                  <span className="text-xs text-muted-foreground">{user.username}</span>
+                </div>
+                <div className="space-y-2">
+                  <Label>Nome Completo</Label>
+                  <Input value={fullName} onChange={(e) => setFullName(e.target.value)} data-testid="input-profile-fullname" />
+                </div>
+                <div className="space-y-2">
+                  <Label>E-mail</Label>
+                  <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" data-testid="input-profile-email" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Nova Senha (deixe vazio para manter)</Label>
+                  <Input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} type="password" placeholder="••••••••" data-testid="input-profile-password" />
+                </div>
+                <Button onClick={() => profileMutation.mutate()} disabled={profileMutation.isPending} className="w-full" data-testid="button-save-profile">
+                  {profileMutation.isPending ? "Salvando..." : "Salvar Perfil"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         )}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="outline" className="text-[10px]">v1.0.0</Badge>
           <span className="text-[10px] text-muted-foreground">Asterisk 22 LTS</span>
         </div>

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import {
   Server,
   Phone,
@@ -14,6 +15,7 @@ import {
   Users,
   Podcast,
   BookUser,
+  BarChart3,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -282,6 +284,14 @@ export default function Dashboard() {
   const { data: contactsList, isLoading: loadingContacts } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
   });
+  const { data: activityData } = useQuery<{ logs: any[], total: number }>({
+    queryKey: ["/api/activity-logs", { limit: 5 }],
+    queryFn: async () => {
+      const res = await fetch("/api/activity-logs?limit=5");
+      if (!res.ok) return { logs: [], total: 0 };
+      return res.json();
+    },
+  });
 
   const isLoading = loadingServers || loadingCompanies || loadingExtensions || loadingTrunks || loadingCalls || loadingConferenceRooms || loadingContacts;
 
@@ -383,6 +393,67 @@ export default function Dashboard() {
           <h2 className="text-sm font-semibold mb-4">Chamadas Recentes</h2>
           <RecentCallsCard calls={calls || []} />
         </div>
+      </div>
+
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Atalhos Rápidos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Link href="/extensions">
+                <Button variant="outline" className="w-full justify-start" data-testid="shortcut-extensions">
+                  <Phone className="w-4 h-4 mr-2" /> Ramais
+                </Button>
+              </Link>
+              <Link href="/online-calls">
+                <Button variant="outline" className="w-full justify-start" data-testid="shortcut-online-calls">
+                  <PhoneCall className="w-4 h-4 mr-2" /> Chamadas
+                </Button>
+              </Link>
+              <Link href="/reports">
+                <Button variant="outline" className="w-full justify-start" data-testid="shortcut-reports">
+                  <BarChart3 className="w-4 h-4 mr-2" /> Relatórios
+                </Button>
+              </Link>
+              <Link href="/servers">
+                <Button variant="outline" className="w-full justify-start" data-testid="shortcut-servers">
+                  <Server className="w-4 h-4 mr-2" /> Servidores
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Activity className="w-4 h-4" /> Atividade Recente
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {activityData?.logs && activityData.logs.length > 0 ? (
+              <div className="space-y-3">
+                {activityData.logs.map((log: any) => (
+                  <div key={log.id} className="flex items-center justify-between gap-4 text-xs" data-testid={`activity-item-${log.id}`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Badge variant={log.action === "create" ? "default" : log.action === "delete" ? "destructive" : "secondary"} className="text-[9px] shrink-0">
+                        {log.action === "create" ? "Criar" : log.action === "update" ? "Editar" : log.action === "delete" ? "Excluir" : log.action}
+                      </Badge>
+                      <span className="text-muted-foreground truncate">{log.userName} - {log.resource}</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                      {new Date(log.createdAt).toLocaleDateString("pt-BR")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Nenhuma atividade recente</p>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
