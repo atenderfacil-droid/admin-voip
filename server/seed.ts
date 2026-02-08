@@ -1,6 +1,7 @@
 import { db } from "./db";
-import { companies, servers, extensions, sipTrunks, ivrMenus, callLogs } from "@shared/schema";
+import { companies, servers, extensions, sipTrunks, ivrMenus, callLogs, users } from "@shared/schema";
 import { sql } from "drizzle-orm";
+import bcrypt from "bcrypt";
 
 export async function seedDatabase() {
   const existingCompanies = await db.select().from(companies);
@@ -75,6 +76,45 @@ export async function seedDatabase() {
       contactEmail: "fernando@imobiliariacentral.com.br",
       contactPhone: "+55 41 95432-1098",
       active: false,
+    },
+  ]);
+
+  await db.insert(users).values([
+    {
+      username: "admin",
+      password: bcrypt.hashSync("admin123", 10),
+      fullName: "Carlos Administrador",
+      email: "admin@admin-voip.com.br",
+      role: "super_admin" as const,
+      companyId: masterCompany.id,
+      active: true,
+    },
+    {
+      username: "ana.silva",
+      password: bcrypt.hashSync("senha123", 10),
+      fullName: "Ana Silva",
+      email: "ana@techsoft.com.br",
+      role: "admin" as const,
+      companyId: tenantCompany1.id,
+      active: true,
+    },
+    {
+      username: "roberto.mendes",
+      password: bcrypt.hashSync("senha123", 10),
+      fullName: "Roberto Mendes",
+      email: "roberto@vendasexpress.com.br",
+      role: "operator" as const,
+      companyId: tenantCompany2.id,
+      active: true,
+    },
+    {
+      username: "marina.oliveira",
+      password: bcrypt.hashSync("senha123", 10),
+      fullName: "Marina Oliveira",
+      email: "marina@callcenterpro.com.br",
+      role: "admin" as const,
+      companyId: dedicatedCompany.id,
+      active: true,
     },
   ]);
 

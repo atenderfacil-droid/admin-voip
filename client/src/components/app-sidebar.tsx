@@ -10,6 +10,8 @@ import {
   FileText,
   Settings,
   Headphones,
+  Users,
+  LogOut,
 } from "lucide-react";
 import {
   Sidebar,
@@ -24,6 +26,8 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
 
 const mainNav = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -40,11 +44,20 @@ const telephonyNav = [
 const systemNav = [
   { title: "Registro de Chamadas", url: "/call-logs", icon: FileText },
   { title: "Integrações", url: "/integrations", icon: Plug },
+  { title: "Usuários", url: "/users", icon: Users },
   { title: "Configurações", url: "/settings", icon: Settings },
 ];
 
+const roleLabels: Record<string, string> = {
+  super_admin: "Super Admin",
+  admin: "Administrador",
+  operator: "Operador",
+  viewer: "Visualizador",
+};
+
 export function AppSidebar() {
   const [location] = useLocation();
+  const { user, logout } = useAuth();
 
   return (
     <Sidebar>
@@ -128,7 +141,23 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-4">
+      <SidebarFooter className="p-4 space-y-3">
+        {user && (
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-medium truncate">{user.fullName}</span>
+              <span className="text-[10px] text-muted-foreground truncate">{roleLabels[user.role]}</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={logout}
+              data-testid="button-logout"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-[10px]">v1.0.0</Badge>
           <span className="text-[10px] text-muted-foreground">Asterisk 22 LTS</span>

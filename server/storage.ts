@@ -28,8 +28,11 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  getUsers(companyId?: string): Promise<User[]>;
+  updateUser(id: string, user: Partial<InsertUser>): Promise<User | undefined>;
+  deleteUser(id: string): Promise<void>;
 
-  getCompanies(): Promise<Company[]>;
+  getCompanies(companyId?: string): Promise<Company[]>;
   getCompany(id: string): Promise<Company | undefined>;
   createCompany(company: InsertCompany): Promise<Company>;
   updateCompany(id: string, company: Partial<InsertCompany>): Promise<Company | undefined>;
@@ -79,7 +82,26 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async getCompanies(): Promise<Company[]> {
+  async getUsers(companyId?: string): Promise<User[]> {
+    if (companyId) {
+      return db.select().from(users).where(eq(users.companyId, companyId));
+    }
+    return db.select().from(users);
+  }
+
+  async updateUser(id: string, user: Partial<InsertUser>): Promise<User | undefined> {
+    const [updated] = await db.update(users).set(user).where(eq(users.id, id)).returning();
+    return updated;
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await db.delete(users).where(eq(users.id, id));
+  }
+
+  async getCompanies(companyId?: string): Promise<Company[]> {
+    if (companyId) {
+      return db.select().from(companies).where(eq(companies.id, companyId));
+    }
     return db.select().from(companies);
   }
 
@@ -193,12 +215,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createIvrMenu(menu: InsertIvrMenu): Promise<IvrMenu> {
-    const [created] = await db.insert(ivrMenus).values(menu).returning();
+    const [created] = await db.insert(ivrMenus).values(menu as any).returning();
     return created;
   }
 
   async updateIvrMenu(id: string, menu: Partial<InsertIvrMenu>): Promise<IvrMenu | undefined> {
-    const [updated] = await db.update(ivrMenus).set(menu).where(eq(ivrMenus.id, id)).returning();
+    const [updated] = await db.update(ivrMenus).set(menu as any).where(eq(ivrMenus.id, id)).returning();
     return updated;
   }
 
