@@ -53,8 +53,8 @@ import type { Server as ServerType } from "@shared/schema";
 
 const serverFormSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
-  hostname: z.string().min(1, "Hostname obrigatório"),
-  ipAddress: z.string().min(7, "IP inválido"),
+  hostname: z.string().optional().or(z.literal("")),
+  ipAddress: z.string().optional().or(z.literal("")),
   port: z.coerce.number().min(1).default(5060),
   mode: z.enum(["shared", "dedicated"]),
   status: z.enum(["online", "offline", "maintenance", "error"]).default("offline"),
@@ -73,6 +73,18 @@ const serverFormSchema = z.object({
   sshPassword: z.string().optional(),
   sshPrivateKey: z.string().optional(),
 }).refine((data) => {
+  if (!data.sshEnabled && (!data.hostname || data.hostname.length < 1)) return false;
+  return true;
+}, { message: "Hostname obrigatório", path: ["hostname"] })
+.refine((data) => {
+  if (!data.sshEnabled && (!data.ipAddress || data.ipAddress.length < 7)) return false;
+  return true;
+}, { message: "IP inválido", path: ["ipAddress"] })
+.refine((data) => {
+  if (data.sshEnabled && !data.sshHost) return false;
+  return true;
+}, { message: "Host SSH é obrigatório quando SSH está habilitado", path: ["sshHost"] })
+.refine((data) => {
   if (data.sshEnabled && !data.sshUsername) return false;
   return true;
 }, { message: "Usuário SSH é obrigatório quando SSH está habilitado", path: ["sshUsername"] })
@@ -686,10 +698,15 @@ export default function Servers() {
   });
 
   const onSubmit = (data: ServerForm) => {
+    const submitData = { ...data };
+    if (submitData.sshEnabled && submitData.sshHost) {
+      submitData.hostname = submitData.sshHost;
+      submitData.ipAddress = submitData.sshHost;
+    }
     if (editing) {
-      updateMutation.mutate({ ...data, id: editing.id });
+      updateMutation.mutate({ ...submitData, id: editing.id });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(submitData);
     }
   };
 
@@ -796,15 +813,35 @@ export default function Servers() {
                 <div className="grid grid-cols-2 gap-4">
                   <FormField control={form.control} name="hostname" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Hostname</FormLabel>
-                      <FormControl><Input {...field} placeholder="pbx.empresa.com.br" data-testid="input-server-hostname" /></FormControl>
+                      <FormLabel className={form.watch("sshEnabled") ? "text-muted-foreground" : ""}>Hostname</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder={form.watch("sshEnabled") ? "Preenchido via SSH" : "pbx.empresa.com.br"}
+                          disabled={form.watch("sshEnabled")}
+                          data-testid="input-server-hostname"
+                        />
+                      </FormControl>
+                      {form.watch("sshEnabled") && (
+                        <p className="text-[11px] text-muted-foreground">Será preenchido automaticamente pelo Host SSH</p>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )} />
                   <FormField control={form.control} name="ipAddress" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Endereço IP</FormLabel>
-                      <FormControl><Input {...field} placeholder="192.168.1.100" data-testid="input-server-ip" /></FormControl>
+                      <FormLabel className={form.watch("sshEnabled") ? "text-muted-foreground" : ""}>Endereço IP</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder={form.watch("sshEnabled") ? "Preenchido via SSH" : "192.168.1.100"}
+                          disabled={form.watch("sshEnabled")}
+                          data-testid="input-server-ip"
+                        />
+                      </FormControl>
+                      {form.watch("sshEnabled") && (
+                        <p className="text-[11px] text-muted-foreground">Será preenchido automaticamente pelo Host SSH</p>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -944,9 +981,9 @@ export default function Servers() {
                       <div className="grid grid-cols-2 gap-3">
                         <FormField control={form.control} name="sshHost" render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Host SSH</FormLabel>
-                            <FormControl><Input {...field} placeholder="IP ou hostname do servidor SSH" data-testid="input-ssh-host" /></FormControl>
-                            <FormDescription className="text-[10px]">Deixe vazio para usar o IP do servidor</FormDescription>
+                            <FormLabel>Host SSH *</FormLabel>
+                            <FormControl><Input {...field} placeholder="IP ou hostname do servidor" data-testid="input-ssh-host" /></FormControl>
+                            <FormDescription className="text-[10px]">IP ou hostname do servidor Asterisk</FormDescription>
                             <FormMessage />
                           </FormItem>
                         )} />
