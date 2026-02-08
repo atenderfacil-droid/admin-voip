@@ -63,7 +63,10 @@ export const servers = pgTable("servers", {
   sshAuthMethod: sshAuthMethodEnum("ssh_auth_method").notNull().default("password"),
   sshPassword: text("ssh_password"),
   sshPrivateKey: text("ssh_private_key"),
+  amiAuthDigest: text("ami_auth_digest").default("md5"),
 });
+
+export const amiAuthDigestOptions = ["md5", "sha256", "sha512-256"] as const;
 
 export const extensions = pgTable("extensions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

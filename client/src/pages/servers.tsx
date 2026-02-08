@@ -65,6 +65,7 @@ const serverFormSchema = z.object({
   amiUsername: z.string().optional(),
   amiPassword: z.string().optional(),
   amiEnabled: z.boolean().default(false),
+  amiAuthDigest: z.string().default("md5"),
   sshEnabled: z.boolean().default(false),
   sshHost: z.string().optional(),
   sshPort: z.coerce.number().min(1).default(22),
@@ -856,6 +857,7 @@ export default function Servers() {
       amiUsername: "",
       amiPassword: "",
       amiEnabled: false,
+      amiAuthDigest: "md5",
       sshEnabled: false,
       sshHost: "",
       sshPort: 22,
@@ -942,6 +944,7 @@ export default function Servers() {
       amiUsername: server.amiUsername || "",
       amiPassword: server.amiPassword || "",
       amiEnabled: server.amiEnabled,
+      amiAuthDigest: (server as any).amiAuthDigest || "md5",
       sshEnabled: server.sshEnabled || false,
       sshHost: server.sshHost || "",
       sshPort: server.sshPort || 22,
@@ -969,6 +972,7 @@ export default function Servers() {
       amiUsername: "",
       amiPassword: "",
       amiEnabled: false,
+      amiAuthDigest: "md5",
       sshEnabled: false,
       sshHost: "",
       sshPort: 22,
@@ -1154,6 +1158,26 @@ export default function Servers() {
                           </FormItem>
                         )} />
                       </div>
+
+                      <FormField control={form.control} name="amiAuthDigest" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Algoritmo de Autenticação</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || "md5"}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-ami-auth-digest">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="md5">MD5 (Padrão)</SelectItem>
+                              <SelectItem value="sha256">SHA-256 (Asterisk 22+)</SelectItem>
+                              <SelectItem value="sha512-256">SHA-512/256 (Asterisk 22+)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription className="text-[10px]">Asterisk 22 LTS suporta SHA-256 e SHA-512/256 para autenticação digest mais segura</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
 
                       <div className="rounded-md bg-muted/50 p-2.5 mt-2">
                         <p className="text-[10px] text-muted-foreground flex items-start gap-1.5">

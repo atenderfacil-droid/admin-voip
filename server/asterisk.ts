@@ -265,7 +265,7 @@ export class AsteriskAMI {
         }
       });
 
-      socket.on("error", (err) => {
+      socket.on("error", (err: Error) => {
         cleanup();
         reject(new Error(`Erro AMI: ${err.message}`));
       });
@@ -351,6 +351,7 @@ export class AsteriskAMI {
     uptime?: string;
     reloadDate?: string;
     currentCalls?: number;
+    processedCalls?: number;
     startupDate?: string;
   }> {
     const { response } = await this.executeAction({ Action: "CoreStatus" });
@@ -359,6 +360,7 @@ export class AsteriskAMI {
       uptime: response.coreuptime,
       reloadDate: response.corereloaddate,
       currentCalls: parseInt(response.corecurrentcalls || "0"),
+      processedCalls: parseInt(response.coreprocessedcalls || "0"),
       startupDate: response.corestartupdate,
     };
   }
@@ -807,7 +809,7 @@ export class AsteriskAMI {
         }
       });
 
-      socket.on("error", (err) => {
+      socket.on("error", (err: Error) => {
         cleanup();
         reject(new Error(`Erro AMI CDR listener: ${err.message}`));
       });
@@ -976,6 +978,94 @@ export class AsteriskAMI {
       success: response.response === "Success",
       message: response.message || "Monitoramento iniciado",
     };
+  }
+
+  async mixMonitor(channel: string, file: string, options?: string): Promise<{ success: boolean; message: string }> {
+    const action: Record<string, string> = {
+      Action: "MixMonitor",
+      Channel: channel,
+      File: file,
+    };
+    if (options) action["Options"] = options;
+
+    const { response } = await this.executeAction(action);
+    return {
+      success: response.response === "Success",
+      message: response.message || "MixMonitor iniciado",
+    };
+  }
+
+  async stopMixMonitor(channel: string): Promise<{ success: boolean; message: string }> {
+    const { response } = await this.executeAction({
+      Action: "StopMixMonitor",
+      Channel: channel,
+    });
+    return {
+      success: response.response === "Success",
+      message: response.message || "MixMonitor parado",
+    };
+  }
+
+  async hangupMultipleChannels(pattern: string): Promise<{ results: Array<{ channel: string; success: boolean }> }> {
+    const channels = await this.getActiveChannels();
+    const regex = new RegExp(pattern);
+    const matching = channels.filter(c => regex.test(c.channel));
+    const results: Array<{ channel: string; success: boolean }> = [];
+
+    for (const ch of matching) {
+      try {
+        const result = await this.hangupChannel(ch.channel);
+        results.push({ channel: ch.channel, success: result.success });
+      } catch {
+        results.push({ channel: ch.channel, success: false });
+      }
+    }
+
+    return { results };
+  }
+
+  async getPJSIPEndpointDetail(endpoint: string): Promise<{
+    objectname: string;
+    devicestate: string;
+    activechannels: string;
+    transport: string;
+    aor: string;
+    auth: string;
+    context: string;
+    codecs: string;
+    maxContacts: string;
+  }> {
+    try {
+      const { events } = await this.executeAction(
+        { Action: "PJSIPShowEndpoint", Endpoint: endpoint },
+        true,
+        "EndpointDetailComplete"
+      );
+      const detail: any = events.find((e) => e.event === "EndpointDetail" || e.event === "endpointdetail") || {};
+      return {
+        objectname: detail.objectname || endpoint,
+        devicestate: detail.devicestate || "Unavailable",
+        activechannels: detail.activechannels || "0",
+        transport: detail.transport || "",
+        aor: detail.aor || "",
+        auth: detail.auth || "",
+        context: detail.context || "default",
+        codecs: detail.codecs || "",
+        maxContacts: detail.maxcontacts || "1",
+      };
+    } catch {
+      return {
+        objectname: endpoint,
+        devicestate: "Unavailable",
+        activechannels: "0",
+        transport: "",
+        aor: "",
+        auth: "",
+        context: "",
+        codecs: "",
+        maxContacts: "1",
+      };
+    }
   }
 
   async stopMonitor(channel: string): Promise<{ success: boolean; message: string }> {

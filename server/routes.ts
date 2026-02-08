@@ -720,6 +720,65 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/servers/:id/ami/mixmonitor", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const result = await ami.mixMonitor(req.body.channel, req.body.file, req.body.options);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/stopmixmonitor", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const result = await ami.stopMixMonitor(req.body.channel);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/hangup-multiple", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const result = await ami.hangupMultipleChannels(req.body.pattern);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  });
+
+  app.get("/api/servers/:id/ami/pjsip-endpoint/:endpoint", requireAuth, async (req, res) => {
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const result = await ami.getPJSIPEndpointDetail(req.params.endpoint as string);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  });
+
+  app.get("/api/servers/:id/ami/pjsip-endpoints", requireAuth, async (req, res) => {
+    try {
+      const { ami } = await getAMIClient(req.params.id as string, req);
+      const result = await ami.getPJSIPEndpoints();
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  });
+
   app.post("/api/servers/:id/ami/fetch-extensions", requireAuth, async (req, res) => {
     if (!isAdminOrAbove(req)) {
       return res.status(403).json({ message: "Permissão insuficiente" });
