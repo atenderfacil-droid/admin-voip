@@ -19,7 +19,7 @@ Admin VOIP is a SaaS platform for managing Asterisk PBX servers. It supports mul
 client/src/
   App.tsx              - Main app with sidebar layout and routing
   components/
-    app-sidebar.tsx    - Navigation sidebar
+    app-sidebar.tsx    - Navigation sidebar with user profile editing dialog
     theme-provider.tsx - Dark/light theme provider
     theme-toggle.tsx   - Theme toggle button
     ui/                - Shadcn UI components
@@ -63,10 +63,13 @@ shared/
 ```
 
 ## Key Features
-- Landing page pública com apresentação do sistema VOIP
+- Landing page pública com 7 seções (hero, 9 features, diferenciais, planos, tecnologias, footer)
 - Sistema de login e autenticação com sessões seguras
 - Gestão de usuários com níveis de acesso (super_admin, admin, operator, viewer)
+- Edição de perfil do usuário via dialog na sidebar (nome, email, senha)
 - Isolamento multi-tenant: dados filtrados por empresa do usuário logado
+- Dashboard com atalhos rápidos e atividade recente
+- Configurações da plataforma com persistência real no banco (21 campos)
 - Dashboard with server monitoring (real AMI data when configured)
 - Multi-tenant company management (Master/Tenant/Dedicated)
 - Asterisk server management with full AMI integration (shared/dedicated modes)
