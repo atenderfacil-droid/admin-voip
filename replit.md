@@ -29,7 +29,7 @@ client/src/
     dashboard.tsx      - Main dashboard with stats and server status
     companies.tsx      - Company/tenant management (CRUD)
     servers.tsx        - Asterisk server management (CRUD)
-    extensions.tsx     - SIP extensions/ramais management (CRUD)
+    extensions.tsx     - SIP extensions/ramais management (CRUD + real-time AMI status)
     sip-trunks.tsx     - SIP trunk configuration (CRUD)
     ivr.tsx            - IVR/URA menu management (CRUD)
     queues.tsx         - Queue management (CRUD + real-time AMI status)
@@ -41,6 +41,7 @@ server/
   index.ts             - Express server entry point
   routes.ts            - All API routes (auth + CRUD + AMI)
   asterisk.ts          - AsteriskAMI service (TCP socket AMI client)
+  ssh-config.ts        - Remote AMI configuration via SSH tunnel
   storage.ts           - Database storage layer (IStorage interface)
   db.ts                - Database connection (Drizzle + pg)
   seed.ts              - Seed data for initial setup
@@ -90,6 +91,7 @@ All prefixed with `/api/`:
 - `/companies` - CRUD
 - `/servers` - CRUD
 - `/extensions` - CRUD
+- `/extensions/live-status` - GET real-time peer status from all AMI servers (polled every 15s)
 - `/sip-trunks` - CRUD
 - `/ivr-menus` - CRUD
 - `/queues` - CRUD
