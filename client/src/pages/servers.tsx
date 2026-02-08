@@ -247,6 +247,35 @@ function AMIConnectionStatus({ server }: { server: ServerType }) {
     },
   });
 
+  const connectMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/servers/${server.id}/ami/connect`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setConnectionResult(data);
+      queryClient.invalidateQueries({ queryKey: ["/api/servers"] });
+      toast({
+        title: data.success ? "Servidor conectado" : "Falha ao conectar",
+        description: data.success
+          ? `Status atualizado para Online${data.version ? ` (Asterisk v${data.version})` : ""}`
+          : data.message,
+        variant: data.success ? "default" : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      setConnectionResult({ success: false, message: error.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/servers"] });
+      toast({
+        title: "Erro ao conectar",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const isLoading = testMutation.isPending || connectMutation.isPending;
+
   if (!server.amiEnabled) {
     return (
       <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/50">
@@ -262,15 +291,28 @@ function AMIConnectionStatus({ server }: { server: ServerType }) {
         variant="outline"
         size="sm"
         onClick={() => testMutation.mutate()}
-        disabled={testMutation.isPending}
+        disabled={isLoading}
         data-testid={`button-test-connection-${server.id}`}
       >
         {testMutation.isPending ? (
           <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
         ) : (
-          <Zap className="w-3.5 h-3.5 mr-1.5" />
+          <TestTube className="w-3.5 h-3.5 mr-1.5" />
         )}
         Testar Conexão
+      </Button>
+      <Button
+        size="sm"
+        onClick={() => connectMutation.mutate()}
+        disabled={isLoading}
+        data-testid={`button-connect-server-${server.id}`}
+      >
+        {connectMutation.isPending ? (
+          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+        ) : (
+          <Plug className="w-3.5 h-3.5 mr-1.5" />
+        )}
+        Conectar
       </Button>
       {connectionResult && (
         <Badge

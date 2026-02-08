@@ -292,6 +292,36 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/servers/:id/ami/connect", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    const serverId = req.params.id as string;
+    try {
+      const { ami } = await getAMIClient(serverId, req);
+      const result = await ami.testConnection();
+      if (result.success) {
+        let version: string | undefined;
+        try {
+          const coreStatus = await ami.getCoreStatus();
+          version = coreStatus?.version;
+        } catch {}
+        const updateData: any = { status: "online" };
+        if (version) updateData.asteriskVersion = version;
+        await storage.updateServer(serverId, updateData);
+        res.json({ success: true, message: "Servidor conectado com sucesso", status: "online", version });
+      } else {
+        await storage.updateServer(serverId, { status: "offline" });
+        res.json({ success: false, message: result.message || "Falha na conexão AMI", status: "offline" });
+      }
+    } catch (error: any) {
+      try {
+        await storage.updateServer(serverId, { status: "offline" });
+      } catch {}
+      res.json({ success: false, message: error.message, status: "offline" });
+    }
+  });
+
   app.get("/api/servers/:id/ami/status", requireAuth, async (req, res) => {
     try {
       const { ami } = await getAMIClient(req.params.id as string, req);
