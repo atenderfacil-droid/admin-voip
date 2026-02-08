@@ -12,6 +12,8 @@ import {
   insertIvrMenuSchema,
   insertQueueSchema,
   insertUserSchema,
+  insertDidSchema,
+  insertCallerIdRuleSchema,
   type User,
   type Server as ServerType,
 } from "@shared/schema";
@@ -1392,6 +1394,157 @@ export async function registerRoutes(
     }
     await storage.deleteUser(req.params.id);
     res.status(204).send();
+  });
+
+  // ===== DID/DDR ROUTES =====
+  app.get("/api/dids", async (req, res) => {
+    const user = getAuthUser(req);
+    const companyId = isSuperAdmin(req) ? undefined : user.companyId || undefined;
+    const didsList = await storage.getDids(companyId);
+    res.json(didsList);
+  });
+
+  app.get("/api/dids/:id", async (req, res) => {
+    const did = await storage.getDid(req.params.id);
+    if (!did) return res.status(404).json({ message: "DID não encontrado" });
+    if (!canAccessCompany(req, did.companyId)) return res.status(403).json({ message: "Acesso negado" });
+    res.json(did);
+  });
+
+  app.post("/api/dids", async (req, res) => {
+    try {
+      if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+      const data = insertDidSchema.parse(req.body);
+      if (!canAccessCompany(req, data.companyId)) return res.status(403).json({ message: "Acesso negado" });
+      const created = await storage.createDid(data);
+      res.status(201).json(created);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/dids/:id", async (req, res) => {
+    try {
+      if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+      const existing = await storage.getDid(req.params.id);
+      if (!existing) return res.status(404).json({ message: "DID não encontrado" });
+      if (!canAccessCompany(req, existing.companyId)) return res.status(403).json({ message: "Acesso negado" });
+      const updated = await storage.updateDid(req.params.id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/dids/:id", async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    const existing = await storage.getDid(req.params.id);
+    if (!existing) return res.status(404).json({ message: "DID não encontrado" });
+    if (!canAccessCompany(req, existing.companyId)) return res.status(403).json({ message: "Acesso negado" });
+    await storage.deleteDid(req.params.id);
+    res.status(204).send();
+  });
+
+  // ===== CALLER ID RULES ROUTES =====
+  app.get("/api/caller-id-rules", async (req, res) => {
+    const user = getAuthUser(req);
+    const companyId = isSuperAdmin(req) ? undefined : user.companyId || undefined;
+    const rules = await storage.getCallerIdRules(companyId);
+    res.json(rules);
+  });
+
+  app.get("/api/caller-id-rules/:id", async (req, res) => {
+    const rule = await storage.getCallerIdRule(req.params.id);
+    if (!rule) return res.status(404).json({ message: "Regra não encontrada" });
+    if (!canAccessCompany(req, rule.companyId)) return res.status(403).json({ message: "Acesso negado" });
+    res.json(rule);
+  });
+
+  app.post("/api/caller-id-rules", async (req, res) => {
+    try {
+      if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+      const data = insertCallerIdRuleSchema.parse(req.body);
+      if (!canAccessCompany(req, data.companyId)) return res.status(403).json({ message: "Acesso negado" });
+      const created = await storage.createCallerIdRule(data);
+      res.status(201).json(created);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/caller-id-rules/:id", async (req, res) => {
+    try {
+      if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+      const existing = await storage.getCallerIdRule(req.params.id);
+      if (!existing) return res.status(404).json({ message: "Regra não encontrada" });
+      if (!canAccessCompany(req, existing.companyId)) return res.status(403).json({ message: "Acesso negado" });
+      const updated = await storage.updateCallerIdRule(req.params.id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/caller-id-rules/:id", async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    const existing = await storage.getCallerIdRule(req.params.id);
+    if (!existing) return res.status(404).json({ message: "Regra não encontrada" });
+    if (!canAccessCompany(req, existing.companyId)) return res.status(403).json({ message: "Acesso negado" });
+    await storage.deleteCallerIdRule(req.params.id);
+    res.status(204).send();
+  });
+
+  // ===== CALL REPORTS ROUTES =====
+  app.get("/api/reports/calls-summary", async (req, res) => {
+    const user = getAuthUser(req);
+    const companyId = isSuperAdmin(req) ? undefined : user.companyId || undefined;
+    const serverId = req.query.serverId as string | undefined;
+    const period = (req.query.period as string) || "day";
+    const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+    const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+
+    const result = await storage.getCallLogs({
+      companyId,
+      serverId,
+      startDate,
+      endDate,
+      limit: 10000,
+      offset: 0,
+    });
+
+    const dispositionCount: Record<string, number> = {};
+    const hourlyCount: Record<string, number> = {};
+    const dailyCount: Record<string, number> = {};
+    let totalDuration = 0;
+    let totalBillsec = 0;
+    let answered = 0;
+
+    result.logs.forEach((log) => {
+      const disp = log.disposition || "UNKNOWN";
+      dispositionCount[disp] = (dispositionCount[disp] || 0) + 1;
+      if (disp === "ANSWERED") answered++;
+      totalDuration += log.duration;
+      totalBillsec += log.billsec;
+
+      if (log.callDate) {
+        const d = new Date(log.callDate);
+        const hour = d.getHours().toString().padStart(2, "0");
+        hourlyCount[hour] = (hourlyCount[hour] || 0) + 1;
+        const day = d.toISOString().split("T")[0];
+        dailyCount[day] = (dailyCount[day] || 0) + 1;
+      }
+    });
+
+    res.json({
+      total: result.total,
+      answered,
+      answerRate: result.total > 0 ? Math.round((answered / result.total) * 100) : 0,
+      avgDuration: result.total > 0 ? Math.round(totalDuration / result.total) : 0,
+      avgBillsec: answered > 0 ? Math.round(totalBillsec / answered) : 0,
+      dispositionCount,
+      hourlyCount,
+      dailyCount,
+    });
   });
 
   setTimeout(() => initCDRListeners(), 3000);

@@ -19,6 +19,8 @@ import {
   Check,
   AlertTriangle,
   ServerCog,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Extension, Company, Server as ServerType } from "@shared/schema";
@@ -48,6 +51,20 @@ const extensionFormSchema = z.object({
   callForwardNumber: z.string().optional(),
   companyId: z.string().min(1, "Selecione uma empresa"),
   serverId: z.string().min(1, "Selecione um servidor"),
+  nat: z.string().default("force_rport,comedia"),
+  qualify: z.string().default("yes"),
+  dtmfMode: z.string().default("rfc2833"),
+  codecs: z.string().default("alaw,ulaw"),
+  directMedia: z.boolean().default(false),
+  callLimit: z.number().default(2),
+  callGroup: z.string().optional(),
+  pickupGroup: z.string().optional(),
+  forwardType: z.string().optional(),
+  forwardDestination: z.string().optional(),
+  ringTimeout: z.number().default(30),
+  recordingFormat: z.string().default("wav"),
+  permitIp: z.string().optional(),
+  denyIp: z.string().optional(),
 });
 
 type ExtensionForm = z.infer<typeof extensionFormSchema>;
@@ -78,6 +95,7 @@ export default function Extensions() {
   const [serverExtensions, setServerExtensions] = useState<ServerExtension[]>([]);
   const [selectedForImport, setSelectedForImport] = useState<Set<string>>(new Set());
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const { toast } = useToast();
 
   const { data: extensions, isLoading } = useQuery<Extension[]>({
@@ -122,6 +140,20 @@ export default function Extensions() {
       callForwardNumber: "",
       companyId: "",
       serverId: "",
+      nat: "force_rport,comedia",
+      qualify: "yes",
+      dtmfMode: "rfc2833",
+      codecs: "alaw,ulaw",
+      directMedia: false,
+      callLimit: 2,
+      callGroup: "",
+      pickupGroup: "",
+      forwardType: "",
+      forwardDestination: "",
+      ringTimeout: 30,
+      recordingFormat: "wav",
+      permitIp: "",
+      denyIp: "",
     },
   });
 
@@ -266,6 +298,20 @@ export default function Extensions() {
       callForwardNumber: ext.callForwardNumber || "",
       companyId: ext.companyId,
       serverId: ext.serverId,
+      nat: ext.nat || "force_rport,comedia",
+      qualify: ext.qualify || "yes",
+      dtmfMode: ext.dtmfMode || "rfc2833",
+      codecs: ext.codecs || "alaw,ulaw",
+      directMedia: ext.directMedia ?? false,
+      callLimit: ext.callLimit ?? 2,
+      callGroup: ext.callGroup || "",
+      pickupGroup: ext.pickupGroup || "",
+      forwardType: ext.forwardType || "",
+      forwardDestination: ext.forwardDestination || "",
+      ringTimeout: ext.ringTimeout ?? 30,
+      recordingFormat: ext.recordingFormat || "wav",
+      permitIp: ext.permitIp || "",
+      denyIp: ext.denyIp || "",
     });
     setOpen(true);
   };
@@ -286,6 +332,20 @@ export default function Extensions() {
       callForwardNumber: "",
       companyId: "",
       serverId: "",
+      nat: "force_rport,comedia",
+      qualify: "yes",
+      dtmfMode: "rfc2833",
+      codecs: "alaw,ulaw",
+      directMedia: false,
+      callLimit: 2,
+      callGroup: "",
+      pickupGroup: "",
+      forwardType: "",
+      forwardDestination: "",
+      ringTimeout: 30,
+      recordingFormat: "wav",
+      permitIp: "",
+      denyIp: "",
     });
     setOpen(true);
   };
@@ -637,6 +697,187 @@ export default function Extensions() {
                       </FormItem>
                     )} />
                   </div>
+
+                  <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
+                    <CollapsibleTrigger asChild>
+                      <Button type="button" variant="ghost" className="w-full flex items-center justify-between gap-2" data-testid="button-toggle-advanced">
+                        <span className="text-sm font-medium">Configurações SIP Avançadas</span>
+                        {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="space-y-4 pt-2">
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField control={form.control} name="nat" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>NAT</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl><SelectTrigger data-testid="select-ext-nat"><SelectValue /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="force_rport,comedia">force_rport,comedia</SelectItem>
+                                <SelectItem value="yes">yes</SelectItem>
+                                <SelectItem value="no">no</SelectItem>
+                                <SelectItem value="force_rport">force_rport</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="qualify" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Qualify</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl><SelectTrigger data-testid="select-ext-qualify"><SelectValue /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="yes">yes</SelectItem>
+                                <SelectItem value="no">no</SelectItem>
+                                <SelectItem value="500">500 ms</SelectItem>
+                                <SelectItem value="1000">1000 ms</SelectItem>
+                                <SelectItem value="2000">2000 ms</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField control={form.control} name="dtmfMode" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Modo DTMF</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl><SelectTrigger data-testid="select-ext-dtmf"><SelectValue /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="rfc2833">rfc2833</SelectItem>
+                                <SelectItem value="info">info</SelectItem>
+                                <SelectItem value="inband">inband</SelectItem>
+                                <SelectItem value="auto">auto</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="codecs" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Codecs</FormLabel>
+                            <FormControl><Input {...field} placeholder="alaw,ulaw,g729,gsm" data-testid="input-ext-codecs" /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField control={form.control} name="directMedia" render={({ field }) => (
+                          <FormItem className="flex items-center justify-between rounded-md border p-3">
+                            <div>
+                              <FormLabel className="text-xs">Direct Media</FormLabel>
+                              <FormDescription className="text-[10px]">Permitir mídia direta entre endpoints</FormDescription>
+                            </div>
+                            <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="callLimit" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Limite de Chamadas</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                value={field.value}
+                                onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                                data-testid="input-ext-calllimit"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField control={form.control} name="callGroup" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Grupo de Chamada</FormLabel>
+                            <FormControl><Input {...field} placeholder="1" data-testid="input-ext-callgroup" /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="pickupGroup" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Grupo de Captura</FormLabel>
+                            <FormControl><Input {...field} placeholder="1" data-testid="input-ext-pickupgroup" /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField control={form.control} name="forwardType" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Tipo de Encaminhamento</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value || ""}>
+                              <FormControl><SelectTrigger data-testid="select-ext-forwardtype"><SelectValue placeholder="Nenhum" /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="none">Nenhum</SelectItem>
+                                <SelectItem value="unconditional">Incondicional</SelectItem>
+                                <SelectItem value="busy">Ocupado</SelectItem>
+                                <SelectItem value="noanswer">Sem Resposta</SelectItem>
+                                <SelectItem value="unavailable">Indisponível</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="forwardDestination" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Destino do Encaminhamento</FormLabel>
+                            <FormControl><Input {...field} placeholder="Número ou ramal de destino" data-testid="input-ext-forwarddest" /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField control={form.control} name="ringTimeout" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Timeout de Ring (s)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                value={field.value}
+                                onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                                data-testid="input-ext-ringtimeout"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="recordingFormat" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Formato de Gravação</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl><SelectTrigger data-testid="select-ext-recformat"><SelectValue /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="wav">wav</SelectItem>
+                                <SelectItem value="gsm">gsm</SelectItem>
+                                <SelectItem value="wav49">wav49</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField control={form.control} name="permitIp" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>IP Permitido</FormLabel>
+                            <FormControl><Input {...field} placeholder="0.0.0.0/0.0.0.0" data-testid="input-ext-permitip" /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="denyIp" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>IP Bloqueado</FormLabel>
+                            <FormControl><Input {...field} placeholder="0.0.0.0/0.0.0.0" data-testid="input-ext-denyip" /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+
                   <div className="flex justify-end gap-2 pt-2">
                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
                     <Button

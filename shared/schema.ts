@@ -11,6 +11,8 @@ export const trunkStatusEnum = pgEnum("trunk_status", ["registered", "unregister
 export const ivrStatusEnum = pgEnum("ivr_status", ["active", "inactive", "draft"]);
 export const companyTypeEnum = pgEnum("company_type", ["master", "tenant", "dedicated"]);
 export const queueStrategyEnum = pgEnum("queue_strategy", ["ringall", "leastrecent", "fewestcalls", "random", "rrmemory", "linear", "wrandom"]);
+export const didDestinationTypeEnum = pgEnum("did_destination_type", ["extension", "queue", "ivr", "external"]);
+export const calleridRuleActionEnum = pgEnum("callerid_rule_action", ["set", "prefix", "suffix", "remove_prefix", "block"]);
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -76,6 +78,20 @@ export const extensions = pgTable("extensions", {
   voicemailEnabled: boolean("voicemail_enabled").notNull().default(false),
   callRecording: boolean("call_recording").notNull().default(false),
   callForwardNumber: text("call_forward_number"),
+  nat: text("nat").default("force_rport,comedia"),
+  qualify: text("qualify").default("yes"),
+  dtmfMode: text("dtmf_mode").default("rfc2833"),
+  codecs: text("codecs").default("alaw,ulaw"),
+  directMedia: boolean("direct_media").notNull().default(false),
+  callLimit: integer("call_limit").notNull().default(2),
+  callGroup: text("call_group"),
+  pickupGroup: text("pickup_group"),
+  forwardType: text("forward_type"),
+  forwardDestination: text("forward_destination"),
+  ringTimeout: integer("ring_timeout").notNull().default(30),
+  recordingFormat: text("recording_format").default("wav"),
+  permitIp: text("permit_ip"),
+  denyIp: text("deny_ip"),
   companyId: varchar("company_id").notNull(),
   serverId: varchar("server_id").notNull(),
 });
@@ -155,6 +171,35 @@ export const callLogs = pgTable("call_logs", {
   serverId: varchar("server_id").notNull(),
 });
 
+export const dids = pgTable("dids", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  number: text("number").notNull(),
+  description: text("description"),
+  destinationType: didDestinationTypeEnum("destination_type").notNull().default("extension"),
+  destinationValue: text("destination_value").notNull(),
+  businessHoursStart: text("business_hours_start").default("08:00"),
+  businessHoursEnd: text("business_hours_end").default("18:00"),
+  businessDays: text("business_days").default("1,2,3,4,5"),
+  afterHoursDestType: didDestinationTypeEnum("after_hours_dest_type"),
+  afterHoursDestValue: text("after_hours_dest_value"),
+  active: boolean("active").notNull().default(true),
+  companyId: varchar("company_id").notNull(),
+  serverId: varchar("server_id").notNull(),
+});
+
+export const callerIdRules = pgTable("caller_id_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  matchPattern: text("match_pattern").notNull(),
+  action: calleridRuleActionEnum("action").notNull().default("set"),
+  value: text("value"),
+  priority: integer("priority").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  companyId: varchar("company_id").notNull(),
+  serverId: varchar("server_id"),
+});
+
 export interface IvrOption {
   digit: string;
   action: string;
@@ -177,6 +222,8 @@ export const insertSipTrunkSchema = createInsertSchema(sipTrunks).omit({ id: tru
 export const insertIvrMenuSchema = createInsertSchema(ivrMenus).omit({ id: true });
 export const insertQueueSchema = createInsertSchema(queues).omit({ id: true });
 export const insertCallLogSchema = createInsertSchema(callLogs).omit({ id: true });
+export const insertDidSchema = createInsertSchema(dids).omit({ id: true });
+export const insertCallerIdRuleSchema = createInsertSchema(callerIdRules).omit({ id: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -194,3 +241,7 @@ export type InsertQueue = z.infer<typeof insertQueueSchema>;
 export type Queue = typeof queues.$inferSelect;
 export type InsertCallLog = z.infer<typeof insertCallLogSchema>;
 export type CallLog = typeof callLogs.$inferSelect;
+export type InsertDid = z.infer<typeof insertDidSchema>;
+export type Did = typeof dids.$inferSelect;
+export type InsertCallerIdRule = z.infer<typeof insertCallerIdRuleSchema>;
+export type CallerIdRule = typeof callerIdRules.$inferSelect;

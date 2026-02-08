@@ -9,6 +9,8 @@ import {
   ivrMenus,
   queues,
   callLogs,
+  dids,
+  callerIdRules,
   type User,
   type InsertUser,
   type Company,
@@ -25,6 +27,10 @@ import {
   type InsertQueue,
   type CallLog,
   type InsertCallLog,
+  type Did,
+  type InsertDid,
+  type CallerIdRule,
+  type InsertCallerIdRule,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -83,6 +89,18 @@ export interface IStorage {
     offset?: number;
   }): Promise<{ logs: CallLog[]; total: number }>;
   createCallLog(log: InsertCallLog): Promise<CallLog>;
+
+  getDids(companyId?: string): Promise<Did[]>;
+  getDid(id: string): Promise<Did | undefined>;
+  createDid(did: InsertDid): Promise<Did>;
+  updateDid(id: string, did: Partial<InsertDid>): Promise<Did | undefined>;
+  deleteDid(id: string): Promise<void>;
+
+  getCallerIdRules(companyId?: string): Promise<CallerIdRule[]>;
+  getCallerIdRule(id: string): Promise<CallerIdRule | undefined>;
+  createCallerIdRule(rule: InsertCallerIdRule): Promise<CallerIdRule>;
+  updateCallerIdRule(id: string, rule: Partial<InsertCallerIdRule>): Promise<CallerIdRule | undefined>;
+  deleteCallerIdRule(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -312,6 +330,58 @@ export class DatabaseStorage implements IStorage {
   async createCallLog(log: InsertCallLog): Promise<CallLog> {
     const [created] = await db.insert(callLogs).values(log).returning();
     return created;
+  }
+
+  async getDids(companyId?: string): Promise<Did[]> {
+    if (companyId) {
+      return db.select().from(dids).where(eq(dids.companyId, companyId));
+    }
+    return db.select().from(dids);
+  }
+
+  async getDid(id: string): Promise<Did | undefined> {
+    const [did] = await db.select().from(dids).where(eq(dids.id, id));
+    return did;
+  }
+
+  async createDid(did: InsertDid): Promise<Did> {
+    const [created] = await db.insert(dids).values(did).returning();
+    return created;
+  }
+
+  async updateDid(id: string, did: Partial<InsertDid>): Promise<Did | undefined> {
+    const [updated] = await db.update(dids).set(did).where(eq(dids.id, id)).returning();
+    return updated;
+  }
+
+  async deleteDid(id: string): Promise<void> {
+    await db.delete(dids).where(eq(dids.id, id));
+  }
+
+  async getCallerIdRules(companyId?: string): Promise<CallerIdRule[]> {
+    if (companyId) {
+      return db.select().from(callerIdRules).where(eq(callerIdRules.companyId, companyId));
+    }
+    return db.select().from(callerIdRules);
+  }
+
+  async getCallerIdRule(id: string): Promise<CallerIdRule | undefined> {
+    const [rule] = await db.select().from(callerIdRules).where(eq(callerIdRules.id, id));
+    return rule;
+  }
+
+  async createCallerIdRule(rule: InsertCallerIdRule): Promise<CallerIdRule> {
+    const [created] = await db.insert(callerIdRules).values(rule).returning();
+    return created;
+  }
+
+  async updateCallerIdRule(id: string, rule: Partial<InsertCallerIdRule>): Promise<CallerIdRule | undefined> {
+    const [updated] = await db.update(callerIdRules).set(rule).where(eq(callerIdRules.id, id)).returning();
+    return updated;
+  }
+
+  async deleteCallerIdRule(id: string): Promise<void> {
+    await db.delete(callerIdRules).where(eq(callerIdRules.id, id));
   }
 }
 
