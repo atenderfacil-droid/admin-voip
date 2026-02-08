@@ -9,18 +9,12 @@ import {
   PhoneForwarded,
   Clock,
   Activity,
-  Cpu,
-  HardDrive,
   ArrowUpRight,
-  ArrowDownRight,
   Plug,
   Users,
-  RefreshCw,
-  Loader2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import type { Server as ServerType, Company, Extension, SipTrunk, CallLog, Queue } from "@shared/schema";
@@ -130,37 +124,16 @@ function ServerStatusCard({ server }: { server: ServerType }) {
           </div>
         ) : (
           <div className="space-y-3">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                  <Cpu className="w-3 h-3" /> CPU
-                </span>
-                <span className="text-[11px] font-medium">{server.cpuUsage}%</span>
-              </div>
-              <Progress value={server.cpuUsage} className="h-1.5" />
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                  <HardDrive className="w-3 h-3" /> Memória
-                </span>
-                <span className="text-[11px] font-medium">{server.memoryUsage}%</span>
-              </div>
-              <Progress value={server.memoryUsage} className="h-1.5" />
-            </div>
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                <Activity className="w-3 h-3" /> Canais
-              </span>
-              <span className="text-[11px] font-medium">
-                {server.activeChannels}/{server.maxChannels}
-              </span>
-            </div>
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                <Clock className="w-3 h-3" /> Uptime
+                <Activity className="w-3 h-3" /> Máx. Canais
               </span>
-              <span className="text-[11px] font-medium">{server.uptime || "N/A"}</span>
+              <span className="text-[11px] font-medium">{server.maxChannels}</span>
+            </div>
+            <div className="text-center py-2">
+              <span className="text-[11px] text-muted-foreground">
+                {server.amiEnabled ? "Conectando ao AMI..." : "AMI não habilitado - habilite para ver dados em tempo real"}
+              </span>
             </div>
           </div>
         )}

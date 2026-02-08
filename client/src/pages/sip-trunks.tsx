@@ -387,7 +387,7 @@ export default function SipTrunks() {
                   <p>Empresa: <span className="font-medium">{getCompanyName(trunk.companyId)}</span></p>
                   <div className="flex items-center gap-1">
                     <Activity className="w-3 h-3" />
-                    <span>Canais: {trunk.activeChannels}/{trunk.maxChannels}</span>
+                    <span>Máx. Canais: {trunk.maxChannels}</span>
                   </div>
                 </div>
 

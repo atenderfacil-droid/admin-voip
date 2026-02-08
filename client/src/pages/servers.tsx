@@ -742,36 +742,18 @@ export default function Servers() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                        <Cpu className="w-3 h-3" /> CPU
-                      </span>
-                      <span className="text-[11px] font-medium">{server.cpuUsage}%</span>
-                    </div>
-                    <Progress value={server.cpuUsage} className="h-1.5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                        <HardDrive className="w-3 h-3" /> Memória
-                      </span>
-                      <span className="text-[11px] font-medium">{server.memoryUsage}%</span>
-                    </div>
-                    <Progress value={server.memoryUsage} className="h-1.5" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                      <Activity className="w-3 h-3" /> Máx. Canais
+                    </span>
+                    <span className="text-[11px] font-medium">{server.maxChannels}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                      <Activity className="w-3 h-3" /> Canais
+                      <Plug className="w-3 h-3" /> AMI
                     </span>
-                    <span className="text-[11px] font-medium">{server.activeChannels}/{server.maxChannels}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> Uptime
-                    </span>
-                    <span className="text-[11px] font-medium">{server.uptime || "N/A"}</span>
+                    <span className="text-[11px] font-medium">{server.amiEnabled ? "Habilitado" : "Desabilitado"}</span>
                   </div>
                 </div>
 
