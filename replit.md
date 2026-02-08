@@ -33,7 +33,7 @@ client/src/
     sip-trunks.tsx     - SIP trunk configuration (CRUD)
     ivr.tsx            - IVR/URA menu management (CRUD)
     queues.tsx         - Queue management (CRUD + real-time AMI status)
-    call-logs.tsx      - Call detail records viewer with filters
+    call-logs.tsx      - CDR (Call Detail Records) viewer with real-time AMI capture, filters and pagination
     integrations.tsx   - Device compatibility, SIP providers, API docs
     settings.tsx       - Platform configuration settings
     users.tsx          - Gestão de usuários do sistema (CRUD)
@@ -68,7 +68,12 @@ shared/
 - SIP trunk configuration for VoIP providers
 - IVR/URA menu builder with multi-level options
 - **Queue management** (CRUD + real-time AMI queue status)
-- Call detail records (CDR) with filtering
+- **CDR Integration**: Real-time call detail records captured via AMI Event: Cdr
+  - Persistent CDR listeners auto-start at boot for all AMI-enabled servers
+  - Auto-reconnect on disconnect with 30s retry
+  - Server-side filtering by date range, server, disposition, search text
+  - Pagination with configurable page size
+  - Full Asterisk CDR fields (clid, channel, dstchannel, disposition, billsec, uniqueid, etc.)
 - Integration documentation (softphones, IP phones, SIP providers, API)
 - Dark/light theme support
 - Responsive design
