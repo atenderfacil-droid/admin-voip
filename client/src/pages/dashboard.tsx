@@ -151,16 +151,25 @@ function ServerStatusCard({ server }: { server: ServerType }) {
 }
 
 function RecentCallsCard({ calls }: { calls: CallLog[] }) {
-  const statusIcon: Record<string, any> = {
-    answered: PhoneCall,
-    missed: PhoneOff,
-    forwarded: PhoneForwarded,
+  const dispositionIcon: Record<string, any> = {
+    "ANSWERED": PhoneCall,
+    "NO ANSWER": PhoneOff,
+    "BUSY": PhoneOff,
+    "FAILED": PhoneOff,
   };
 
-  const statusColor: Record<string, string> = {
-    answered: "text-emerald-500",
-    missed: "text-red-500",
-    forwarded: "text-amber-500",
+  const dispositionColor: Record<string, string> = {
+    "ANSWERED": "text-emerald-500",
+    "NO ANSWER": "text-red-500",
+    "BUSY": "text-amber-500",
+    "FAILED": "text-red-500",
+  };
+
+  const dispositionLabel: Record<string, string> = {
+    "ANSWERED": "Atendida",
+    "NO ANSWER": "N/A",
+    "BUSY": "Ocupado",
+    "FAILED": "Falha",
   };
 
   return (
@@ -172,10 +181,10 @@ function RecentCallsCard({ calls }: { calls: CallLog[] }) {
       <CardContent className="p-0">
         <div className="divide-y">
           {calls.slice(0, 8).map((call) => {
-            const Icon = statusIcon[call.status] || PhoneCall;
+            const Icon = dispositionIcon[call.disposition] || PhoneCall;
             return (
               <div key={call.id} className="flex items-center gap-3 px-5 py-2.5">
-                <Icon className={`w-4 h-4 flex-shrink-0 ${statusColor[call.status] || "text-muted-foreground"}`} />
+                <Icon className={`w-4 h-4 flex-shrink-0 ${dispositionColor[call.disposition] || "text-muted-foreground"}`} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-medium truncate">{call.source}</span>
@@ -185,9 +194,9 @@ function RecentCallsCard({ calls }: { calls: CallLog[] }) {
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <span className="text-[11px] text-muted-foreground">
-                    {call.duration > 0 ? `${Math.floor(call.duration / 60)}:${String(call.duration % 60).padStart(2, "0")}` : "--:--"}
+                    {call.billsec > 0 ? `${Math.floor(call.billsec / 60)}:${String(call.billsec % 60).padStart(2, "0")}` : "--:--"}
                   </span>
-                  <Badge variant="outline" className="text-[10px]">{call.type}</Badge>
+                  <Badge variant="outline" className="text-[10px]">{dispositionLabel[call.disposition] || call.disposition}</Badge>
                 </div>
               </div>
             );
@@ -238,9 +247,11 @@ export default function Dashboard() {
   const { data: trunks, isLoading: loadingTrunks } = useQuery<SipTrunk[]>({
     queryKey: ["/api/sip-trunks"],
   });
-  const { data: calls, isLoading: loadingCalls } = useQuery<CallLog[]>({
+  const { data: callsData, isLoading: loadingCalls } = useQuery<{ logs: CallLog[]; total: number }>({
     queryKey: ["/api/call-logs"],
+    queryFn: () => fetch("/api/call-logs?limit=10", { credentials: "include" }).then(r => r.json()),
   });
+  const calls = callsData?.logs;
   const { data: queuesList } = useQuery<Queue[]>({
     queryKey: ["/api/queues"],
   });
