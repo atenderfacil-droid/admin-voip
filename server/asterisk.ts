@@ -720,6 +720,112 @@ export class AsteriskAMI {
     };
   }
 
+  async listenForCDR(onCdr: (cdr: {
+    accountcode: string;
+    source: string;
+    destination: string;
+    dcontext: string;
+    clid: string;
+    channel: string;
+    dstchannel: string;
+    lastapp: string;
+    lastdata: string;
+    starttime: string;
+    answertime: string;
+    endtime: string;
+    duration: string;
+    billsec: string;
+    disposition: string;
+    amaflags: string;
+    uniqueid: string;
+    linkedid: string;
+    userfield: string;
+  }) => void, signal?: AbortSignal): Promise<void> {
+    const { socket, sshClient } = await this.connect();
+
+    return new Promise((resolve, reject) => {
+      let buffer = "";
+      let loginDone = false;
+
+      const cleanup = () => {
+        try { socket.destroy(); } catch {}
+        try { sshClient?.end(); } catch {}
+      };
+
+      if (signal) {
+        signal.addEventListener("abort", () => {
+          cleanup();
+          resolve();
+        });
+      }
+
+      socket.on("data", (data: Buffer) => {
+        buffer += data.toString();
+
+        while (buffer.includes("\r\n\r\n")) {
+          const endIdx = buffer.indexOf("\r\n\r\n");
+          const block = buffer.substring(0, endIdx);
+          buffer = buffer.substring(endIdx + 4);
+
+          const parsed = this.parseBlock(block);
+          if (!parsed) continue;
+
+          if (!loginDone) {
+            if (parsed.response === "Success") {
+              loginDone = true;
+            } else if (parsed.response === "Error") {
+              cleanup();
+              reject(new Error(`Falha no login AMI para CDR: ${parsed.message}`));
+              return;
+            }
+            continue;
+          }
+
+          if (parsed.event === "Cdr" || parsed.event === "cdr") {
+            onCdr({
+              accountcode: parsed.accountcode || "",
+              source: parsed.source || "",
+              destination: parsed.destination || "",
+              dcontext: parsed.destinationcontext || parsed.dcontext || "",
+              clid: parsed.callerid || parsed.clid || "",
+              channel: parsed.channel || "",
+              dstchannel: parsed.destinationchannel || parsed.dstchannel || "",
+              lastapp: parsed.lastapplication || parsed.lastapp || "",
+              lastdata: parsed.lastdata || "",
+              starttime: parsed.starttime || "",
+              answertime: parsed.answertime || "",
+              endtime: parsed.endtime || "",
+              duration: parsed.duration || "0",
+              billsec: parsed.billableseconds || parsed.billsec || "0",
+              disposition: parsed.disposition || "NO ANSWER",
+              amaflags: parsed.amaflags || "",
+              uniqueid: parsed.uniqueid || "",
+              linkedid: parsed.linkedid || "",
+              userfield: parsed.userfield || "",
+            });
+          }
+        }
+      });
+
+      socket.on("error", (err) => {
+        cleanup();
+        reject(new Error(`Erro AMI CDR listener: ${err.message}`));
+      });
+
+      socket.on("close", () => {
+        cleanup();
+        resolve();
+      });
+
+      this.sendAction(socket, {
+        Action: "Login",
+        Username: this.username,
+        Secret: this.password,
+        Events: "cdr",
+      });
+    });
+  }
+
   async queueAdd(queue: string, iface: string, memberName?: string, penalty?: number): Promise<{ success: boolean; message: string }> {
     const action: Record<string, string> = {
       Action: "QueueAdd",

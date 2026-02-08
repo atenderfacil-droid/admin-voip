@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -72,7 +72,16 @@ export interface IStorage {
   updateQueue(id: string, queue: Partial<InsertQueue>): Promise<Queue | undefined>;
   deleteQueue(id: string): Promise<void>;
 
-  getCallLogs(companyId?: string): Promise<CallLog[]>;
+  getCallLogs(filters: {
+    companyId?: string;
+    serverId?: string;
+    disposition?: string;
+    startDate?: Date;
+    endDate?: Date;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ logs: CallLog[]; total: number }>;
   createCallLog(log: InsertCallLog): Promise<CallLog>;
 }
 
@@ -268,11 +277,36 @@ export class DatabaseStorage implements IStorage {
     await db.delete(queues).where(eq(queues.id, id));
   }
 
-  async getCallLogs(companyId?: string): Promise<CallLog[]> {
-    if (companyId) {
-      return db.select().from(callLogs).where(eq(callLogs.companyId, companyId));
+  async getCallLogs(filters: {
+    companyId?: string;
+    serverId?: string;
+    disposition?: string;
+    startDate?: Date;
+    endDate?: Date;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ logs: CallLog[]; total: number }> {
+    const conditions = [];
+    if (filters.companyId) conditions.push(eq(callLogs.companyId, filters.companyId));
+    if (filters.serverId) conditions.push(eq(callLogs.serverId, filters.serverId));
+    if (filters.disposition) conditions.push(eq(callLogs.disposition, filters.disposition));
+    if (filters.startDate) conditions.push(gte(callLogs.callDate, filters.startDate));
+    if (filters.endDate) conditions.push(lte(callLogs.callDate, filters.endDate));
+    if (filters.search) {
+      conditions.push(
+        sql`(${callLogs.source} ILIKE ${'%' + filters.search + '%'} OR ${callLogs.destination} ILIKE ${'%' + filters.search + '%'} OR ${callLogs.clid} ILIKE ${'%' + filters.search + '%'})`
+      );
     }
-    return db.select().from(callLogs);
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    const limit = filters.limit || 100;
+    const offset = filters.offset || 0;
+
+    const [totalResult] = await db.select({ count: sql<number>`count(*)::int` }).from(callLogs).where(where);
+    const logs = await db.select().from(callLogs).where(where).orderBy(desc(callLogs.callDate)).limit(limit).offset(offset);
+
+    return { logs, total: totalResult?.count || 0 };
   }
 
   async createCallLog(log: InsertCallLog): Promise<CallLog> {

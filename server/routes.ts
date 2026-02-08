@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcrypt";
-import { createAMIClient, type SSHConfig } from "./asterisk";
+import { createAMIClient, AsteriskAMI, type SSHConfig } from "./asterisk";
 import { setupAMIRemotely } from "./ssh-config";
 import {
   insertCompanySchema,
@@ -13,7 +13,109 @@ import {
   insertQueueSchema,
   insertUserSchema,
   type User,
+  type Server as ServerType,
 } from "@shared/schema";
+import { log } from "./index";
+
+const cdrAbortControllers = new Map<string, AbortController>();
+
+function startCDRListener(server: ServerType) {
+  if (cdrAbortControllers.has(server.id)) {
+    cdrAbortControllers.get(server.id)!.abort();
+    cdrAbortControllers.delete(server.id);
+  }
+
+  if (!server.amiEnabled || !server.amiUsername || !server.amiPassword) return;
+
+  const sshConfig: SSHConfig | undefined = server.sshEnabled
+    ? {
+        enabled: true,
+        host: server.sshHost || server.ipAddress,
+        port: server.sshPort || 22,
+        username: server.sshUsername || "root",
+        authMethod: (server.sshAuthMethod as "password" | "privatekey") || "password",
+        password: server.sshPassword || undefined,
+        privateKey: server.sshPrivateKey || undefined,
+      }
+    : undefined;
+
+  const ami = new AsteriskAMI(
+    server.ipAddress,
+    server.amiPort || 5038,
+    server.amiUsername,
+    server.amiPassword,
+    sshConfig
+  );
+
+  const controller = new AbortController();
+  cdrAbortControllers.set(server.id, controller);
+
+  ami.listenForCDR(async (cdr) => {
+    try {
+      const parseTime = (t: string) => {
+        if (!t || t === "") return null;
+        const d = new Date(t);
+        return isNaN(d.getTime()) ? null : d;
+      };
+
+      await storage.createCallLog({
+        callDate: parseTime(cdr.starttime) || new Date(),
+        clid: cdr.clid || null,
+        source: cdr.source || "",
+        destination: cdr.destination || "",
+        dcontext: cdr.dcontext || null,
+        channel: cdr.channel || null,
+        dstChannel: cdr.dstchannel || null,
+        lastApp: cdr.lastapp || null,
+        lastData: cdr.lastdata || null,
+        startTime: parseTime(cdr.starttime),
+        answerTime: parseTime(cdr.answertime),
+        endTime: parseTime(cdr.endtime),
+        duration: parseInt(cdr.duration) || 0,
+        billsec: parseInt(cdr.billsec) || 0,
+        disposition: cdr.disposition || "NO ANSWER",
+        amaFlags: cdr.amaflags || null,
+        accountCode: cdr.accountcode || null,
+        uniqueId: cdr.uniqueid || null,
+        linkedId: cdr.linkedid || null,
+        userField: cdr.userfield || null,
+        companyId: server.companyId || "",
+        serverId: server.id,
+      });
+      log(`CDR registrado: ${cdr.source} -> ${cdr.destination} (${cdr.disposition}) [${server.name}]`);
+    } catch (err: any) {
+      log(`Erro ao salvar CDR [${server.name}]: ${err.message}`);
+    }
+  }, controller.signal).catch((err) => {
+    log(`CDR listener desconectado [${server.name}]: ${err.message}`);
+    cdrAbortControllers.delete(server.id);
+    setTimeout(() => {
+      storage.getServer(server.id).then((s) => {
+        if (s && s.amiEnabled && s.status === "online") {
+          log(`Reconectando CDR listener [${server.name}]...`);
+          startCDRListener(s);
+        }
+      }).catch(() => {});
+    }, 30000);
+  });
+
+  log(`CDR listener iniciado para servidor: ${server.name}`);
+}
+
+async function initCDRListeners() {
+  try {
+    const allServers = await storage.getServers();
+    const amiServers = allServers.filter(
+      (s) => s.amiEnabled && s.amiUsername && s.amiPassword && s.status === "online"
+    );
+    for (const server of amiServers) {
+      startCDRListener(server);
+    }
+    log(`CDR listeners iniciados para ${amiServers.length} servidor(es)`);
+  } catch (err: any) {
+    log(`Erro ao iniciar CDR listeners: ${err.message}`);
+  }
+}
 
 function excludePassword(user: User) {
   const { password, ...userWithoutPassword } = user;
@@ -261,6 +363,12 @@ export async function registerRoutes(
     try {
       const server = await storage.updateServer(req.params.id, data);
       if (!server) return res.status(404).json({ message: "Servidor não encontrado" });
+      if (server.amiEnabled && server.status === "online") {
+        startCDRListener(server);
+      } else if (cdrAbortControllers.has(server.id)) {
+        cdrAbortControllers.get(server.id)!.abort();
+        cdrAbortControllers.delete(server.id);
+      }
       res.json(server);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1162,11 +1270,25 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
-  // Call Logs (multi-tenant, read-only)
+  // Call Logs (multi-tenant, read-only with filters)
   app.get("/api/call-logs", async (req, res) => {
-    const companyId = getCompanyFilter(req);
-    const logs = await storage.getCallLogs(companyId);
-    res.json(logs);
+    try {
+      const companyId = getCompanyFilter(req);
+      const filters: any = {};
+      if (companyId) filters.companyId = companyId;
+      if (req.query.serverId) filters.serverId = req.query.serverId as string;
+      if (req.query.disposition) filters.disposition = req.query.disposition as string;
+      if (req.query.search) filters.search = req.query.search as string;
+      if (req.query.startDate) filters.startDate = new Date(req.query.startDate as string);
+      if (req.query.endDate) filters.endDate = new Date(req.query.endDate as string);
+      if (req.query.limit) filters.limit = parseInt(req.query.limit as string);
+      if (req.query.offset) filters.offset = parseInt(req.query.offset as string);
+
+      const result = await storage.getCallLogs(filters);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
   });
 
   // Self-profile update (any authenticated user can edit their own profile)
@@ -1271,6 +1393,8 @@ export async function registerRoutes(
     await storage.deleteUser(req.params.id);
     res.status(204).send();
   });
+
+  setTimeout(() => initCDRListeners(), 3000);
 
   return httpServer;
 }
