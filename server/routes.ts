@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcrypt";
 import { createAMIClient, AsteriskAMI, type SSHConfig } from "./asterisk";
-import { setupAMIRemotely } from "./ssh-config";
+import { setupAMIRemotely, connectSSH, execSSHCommand, type SSHConnectionConfig } from "./ssh-config";
 import {
   insertCompanySchema,
   insertServerSchema,
@@ -1604,6 +1604,303 @@ export async function registerRoutes(
       hourlyCount,
       dailyCount,
     });
+  });
+
+  // === SSH helper to get SSH client from server ===
+  async function getSSHClient(serverId: string, req: Request) {
+    const server = await storage.getServer(serverId);
+    if (!server) throw new Error("Servidor não encontrado");
+    if (!canAccessCompany(req, server.companyId)) {
+      throw new Error("Acesso negado");
+    }
+    if (!server.sshEnabled || !server.sshHost || !server.sshUsername) {
+      throw new Error("SSH não está configurado neste servidor");
+    }
+    const sshConfig: SSHConnectionConfig = {
+      host: server.sshHost || server.ipAddress,
+      port: server.sshPort || 22,
+      username: server.sshUsername,
+      authMethod: (server.sshAuthMethod as "password" | "privatekey") || "password",
+      password: server.sshPassword || undefined,
+      privateKey: server.sshPrivateKey || undefined,
+    };
+    const client = await connectSSH(sshConfig);
+    return { client, server };
+  }
+
+  // === RECORDINGS: List recordings via SSH ===
+  app.get("/api/servers/:id/recordings", requireAuth, async (req, res) => {
+    try {
+      const { client, server } = await getSSHClient(req.params.id, req);
+      try {
+        const searchDate = (req.query.date as string) || "";
+        const searchTerm = (req.query.search as string) || "";
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 50;
+
+        const paths = [
+          "/var/spool/asterisk/monitor",
+          "/var/lib/asterisk/sounds/monitor",
+          "/var/spool/asterisk/recording",
+          "/tmp/asterisk-recordings",
+        ];
+
+        const findCmd = `for dir in ${paths.join(" ")}; do [ -d "$dir" ] && find "$dir" -type f \\( -name "*.wav" -o -name "*.gsm" -o -name "*.mp3" -o -name "*.ogg" -o -name "*.WAV" \\) -printf '%T@ %s %p\\n' 2>/dev/null; done | sort -rn`;
+
+        const result = await execSSHCommand(client, findCmd);
+        const lines = result.stdout.trim().split("\n").filter(l => l.trim());
+
+        const recordings = lines.map((line) => {
+          const parts = line.split(" ");
+          const timestamp = parseFloat(parts[0]) * 1000;
+          const size = parseInt(parts[1]);
+          const filePath = parts.slice(2).join(" ");
+          const fileName = filePath.split("/").pop() || "";
+          return {
+            fileName,
+            filePath,
+            size,
+            date: new Date(timestamp).toISOString(),
+            extension: fileName.split(".").pop()?.toLowerCase() || "",
+          };
+        }).filter(r => r.fileName);
+
+        let filtered = recordings;
+        if (searchDate) {
+          filtered = filtered.filter(r => r.date.startsWith(searchDate));
+        }
+        if (searchTerm) {
+          const term = searchTerm.toLowerCase();
+          filtered = filtered.filter(r => r.fileName.toLowerCase().includes(term) || r.filePath.toLowerCase().includes(term));
+        }
+
+        const total = filtered.length;
+        const offset = (page - 1) * limit;
+        const paginated = filtered.slice(offset, offset + limit);
+
+        res.json({ recordings: paginated, total, page, limit, totalPages: Math.ceil(total / limit) });
+      } finally {
+        client.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === RECORDINGS: Download/stream a recording file via SSH ===
+  app.get("/api/servers/:id/recordings/download", requireAuth, async (req, res) => {
+    try {
+      const { client, server } = await getSSHClient(req.params.id, req);
+      const filePath = req.query.file as string;
+      if (!filePath) {
+        client.end();
+        return res.status(400).json({ message: "Parâmetro 'file' é obrigatório" });
+      }
+
+      const sanitized = filePath.replace(/[;&|`$]/g, "");
+      const fileName = sanitized.split("/").pop() || "recording";
+      const ext = fileName.split(".").pop()?.toLowerCase() || "wav";
+
+      const contentTypes: Record<string, string> = {
+        wav: "audio/wav",
+        mp3: "audio/mpeg",
+        gsm: "audio/x-gsm",
+        ogg: "audio/ogg",
+      };
+
+      res.setHeader("Content-Type", contentTypes[ext] || "application/octet-stream");
+      res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
+
+      client.exec(`cat "${sanitized}"`, (err, stream) => {
+        if (err) {
+          client.end();
+          return res.status(500).json({ message: "Erro ao ler arquivo" });
+        }
+        stream.pipe(res);
+        stream.on("close", () => client.end());
+        stream.on("error", () => {
+          client.end();
+          res.end();
+        });
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === RECORDINGS: Delete a recording via SSH ===
+  app.delete("/api/servers/:id/recordings", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    try {
+      const { client } = await getSSHClient(req.params.id, req);
+      try {
+        const filePath = req.query.file as string;
+        if (!filePath) return res.status(400).json({ message: "Parâmetro 'file' é obrigatório" });
+        const sanitized = filePath.replace(/[;&|`$]/g, "");
+        const result = await execSSHCommand(client, `rm -f "${sanitized}"`);
+        if (result.code === 0) {
+          res.json({ success: true, message: "Gravação excluída" });
+        } else {
+          res.status(500).json({ message: result.stderr || "Erro ao excluir gravação" });
+        }
+      } finally {
+        client.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === FIREWALL: Fail2ban status via SSH ===
+  app.get("/api/servers/:id/firewall/fail2ban", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    try {
+      const { client } = await getSSHClient(req.params.id, req);
+      try {
+        const statusResult = await execSSHCommand(client, "fail2ban-client status 2>/dev/null || echo 'NOT_INSTALLED'");
+        if (statusResult.stdout.includes("NOT_INSTALLED")) {
+          return res.json({ installed: false, jails: [] });
+        }
+
+        const jailListMatch = statusResult.stdout.match(/Jail list:\s*(.*)/);
+        const jailNames = jailListMatch ? jailListMatch[1].split(",").map(j => j.trim()).filter(Boolean) : [];
+
+        const jails = [];
+        for (const name of jailNames) {
+          const jailResult = await execSSHCommand(client, `fail2ban-client status ${name} 2>/dev/null`);
+          const currentlyBanned = jailResult.stdout.match(/Currently banned:\s*(\d+)/);
+          const totalBanned = jailResult.stdout.match(/Total banned:\s*(\d+)/);
+          const bannedIps = jailResult.stdout.match(/Banned IP list:\s*(.*)/);
+          const currentlyFailed = jailResult.stdout.match(/Currently failed:\s*(\d+)/);
+          const totalFailed = jailResult.stdout.match(/Total failed:\s*(\d+)/);
+
+          jails.push({
+            name,
+            currentlyBanned: parseInt(currentlyBanned?.[1] || "0"),
+            totalBanned: parseInt(totalBanned?.[1] || "0"),
+            bannedIps: bannedIps?.[1]?.trim().split(/\s+/).filter(Boolean) || [],
+            currentlyFailed: parseInt(currentlyFailed?.[1] || "0"),
+            totalFailed: parseInt(totalFailed?.[1] || "0"),
+          });
+        }
+
+        res.json({ installed: true, jails });
+      } finally {
+        client.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === FIREWALL: Fail2ban unban IP ===
+  app.post("/api/servers/:id/firewall/fail2ban/unban", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    try {
+      const { client } = await getSSHClient(req.params.id, req);
+      try {
+        const { jail, ip } = req.body;
+        if (!jail || !ip) return res.status(400).json({ message: "Jail e IP são obrigatórios" });
+        const sanitizedJail = jail.replace(/[;&|`$]/g, "");
+        const sanitizedIp = ip.replace(/[;&|`$]/g, "");
+        const result = await execSSHCommand(client, `fail2ban-client set ${sanitizedJail} unbanip ${sanitizedIp}`);
+        res.json({ success: result.code === 0, message: result.stdout || result.stderr });
+      } finally {
+        client.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === FIREWALL: IPTables rules via SSH ===
+  app.get("/api/servers/:id/firewall/iptables", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    try {
+      const { client } = await getSSHClient(req.params.id, req);
+      try {
+        const result = await execSSHCommand(client, "iptables -L -n -v --line-numbers 2>/dev/null || echo 'NO_ACCESS'");
+        if (result.stdout.includes("NO_ACCESS")) {
+          return res.json({ accessible: false, chains: [] });
+        }
+
+        const lines = result.stdout.trim().split("\n");
+        const chains: Array<{ name: string; policy: string; rules: Array<{ num: string; pkts: string; bytes: string; target: string; prot: string; source: string; destination: string; extra: string }> }> = [];
+        let currentChain: any = null;
+
+        for (const line of lines) {
+          const chainMatch = line.match(/^Chain\s+(\S+)\s+\(policy\s+(\S+)/);
+          if (chainMatch) {
+            if (currentChain) chains.push(currentChain);
+            currentChain = { name: chainMatch[1], policy: chainMatch[2], rules: [] };
+            continue;
+          }
+          if (currentChain && /^\s*\d+/.test(line)) {
+            const parts = line.trim().split(/\s+/);
+            if (parts.length >= 8) {
+              currentChain.rules.push({
+                num: parts[0],
+                pkts: parts[1],
+                bytes: parts[2],
+                target: parts[3],
+                prot: parts[4],
+                source: parts[6],
+                destination: parts[7],
+                extra: parts.slice(8).join(" "),
+              });
+            }
+          }
+        }
+        if (currentChain) chains.push(currentChain);
+
+        res.json({ accessible: true, chains });
+      } finally {
+        client.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === FIREWALL: System security overview via SSH ===
+  app.get("/api/servers/:id/firewall/overview", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    try {
+      const { client } = await getSSHClient(req.params.id, req);
+      try {
+        const [fail2banVer, iptablesCount, lastAuthLogs, sipPorts] = await Promise.all([
+          execSSHCommand(client, "fail2ban-client --version 2>/dev/null | head -1 || echo 'NOT_INSTALLED'"),
+          execSSHCommand(client, "iptables -L -n 2>/dev/null | grep -c '^' || echo '0'"),
+          execSSHCommand(client, "tail -20 /var/log/auth.log 2>/dev/null || tail -20 /var/log/secure 2>/dev/null || echo ''"),
+          execSSHCommand(client, "ss -tlnp 2>/dev/null | grep -E ':(5060|5061|5038|8088|8089)' || echo ''"),
+        ]);
+
+        const authLines = lastAuthLogs.stdout.trim().split("\n").filter(Boolean);
+        const failedLogins = authLines.filter(l => l.toLowerCase().includes("failed") || l.toLowerCase().includes("invalid")).length;
+
+        res.json({
+          fail2banVersion: fail2banVer.stdout.includes("NOT_INSTALLED") ? null : fail2banVer.stdout.trim(),
+          iptablesRuleCount: parseInt(iptablesCount.stdout.trim()) || 0,
+          recentFailedLogins: failedLogins,
+          openSipPorts: sipPorts.stdout.trim().split("\n").filter(Boolean),
+          lastAuthLogs: authLines.slice(-10),
+        });
+      } finally {
+        client.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   setTimeout(() => initCDRListeners(), 3000);

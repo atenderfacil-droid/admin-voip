@@ -16,6 +16,8 @@ import {
   LogOut,
   Hash,
   Shield,
+  ShieldCheck,
+  FileAudio,
 } from "lucide-react";
 import {
   Sidebar,
@@ -50,6 +52,8 @@ const telephonyNav = [
 ];
 
 const systemNav = [
+  { title: "Gravações", url: "/recordings", icon: FileAudio },
+  { title: "Firewall", url: "/firewall", icon: ShieldCheck },
   { title: "Registro de Chamadas", url: "/call-logs", icon: FileText },
   { title: "Relatórios", url: "/reports", icon: BarChart3 },
   { title: "Integrações", url: "/integrations", icon: Plug },

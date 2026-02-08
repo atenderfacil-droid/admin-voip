@@ -28,7 +28,7 @@ export interface SetupResult {
   asteriskVersion?: string;
 }
 
-function execSSHCommand(client: SSHClient, command: string): Promise<{ stdout: string; stderr: string; code: number }> {
+export function execSSHCommand(client: SSHClient, command: string): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve, reject) => {
     client.exec(command, (err, stream) => {
       if (err) return reject(err);
@@ -56,7 +56,7 @@ function execSSHCommand(client: SSHClient, command: string): Promise<{ stdout: s
   });
 }
 
-function connectSSH(config: SSHConnectionConfig): Promise<SSHClient> {
+export function connectSSH(config: SSHConnectionConfig): Promise<SSHClient> {
   return new Promise((resolve, reject) => {
     const client = new SSHClient();
 
