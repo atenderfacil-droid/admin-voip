@@ -21,6 +21,25 @@ import {
   type Server as ServerType,
 } from "@shared/schema";
 import { log } from "./index";
+import {
+  provisionExtension,
+  removeExtension,
+  provisionSipTrunk,
+  removeSipTrunk,
+  provisionQueue,
+  removeQueue,
+  provisionIvrMenu,
+  removeIvrMenu,
+  provisionConferenceRoom,
+  removeConferenceRoom,
+  provisionDid,
+  removeDid,
+  provisionCallerIdRules,
+  provisionSpeedDials,
+  compareServerData,
+  importExtensionsFromServer,
+  type ComparisonResult,
+} from "./asterisk-provisioner";
 
 const cdrAbortControllers = new Map<string, AbortController>();
 
@@ -1075,6 +1094,11 @@ export async function registerRoutes(
         return res.status(409).json({ message: `Ramal ${data.number} já existe neste servidor` });
       }
       const ext = await storage.createExtension(data);
+      storage.getServer(ext.serverId).then(server => {
+        if (server && server.sshEnabled) {
+          provisionExtension(server, ext).catch(err => log(`Provisionamento falhou: ${err.message}`));
+        }
+      }).catch(() => {});
       res.status(201).json(ext);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1099,6 +1123,11 @@ export async function registerRoutes(
     try {
       const ext = await storage.updateExtension(req.params.id, data);
       if (!ext) return res.status(404).json({ message: "Ramal não encontrado" });
+      storage.getServer(ext.serverId).then(server => {
+        if (server && server.sshEnabled) {
+          provisionExtension(server, ext).catch(err => log(`Provisionamento falhou: ${err.message}`));
+        }
+      }).catch(() => {});
       res.json(ext);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1115,6 +1144,11 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Acesso negado" });
     }
     await storage.deleteExtension(req.params.id);
+    storage.getServer(existing.serverId).then(server => {
+      if (server && server.sshEnabled) {
+        removeExtension(server, existing).catch(err => log(`Provisionamento falhou: ${err.message}`));
+      }
+    }).catch(() => {});
     res.status(204).send();
   });
 
@@ -1147,6 +1181,11 @@ export async function registerRoutes(
     const data = { ...result.data, companyId };
     try {
       const trunk = await storage.createSipTrunk(data);
+      storage.getServer(trunk.serverId).then(server => {
+        if (server && server.sshEnabled) {
+          provisionSipTrunk(server, trunk).catch(err => log(`Provisionamento falhou: ${err.message}`));
+        }
+      }).catch(() => {});
       res.status(201).json(trunk);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1171,6 +1210,11 @@ export async function registerRoutes(
     try {
       const trunk = await storage.updateSipTrunk(req.params.id, data);
       if (!trunk) return res.status(404).json({ message: "Tronco SIP não encontrado" });
+      storage.getServer(trunk.serverId).then(server => {
+        if (server && server.sshEnabled) {
+          provisionSipTrunk(server, trunk).catch(err => log(`Provisionamento falhou: ${err.message}`));
+        }
+      }).catch(() => {});
       res.json(trunk);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1187,6 +1231,11 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Acesso negado" });
     }
     await storage.deleteSipTrunk(req.params.id);
+    storage.getServer(existing.serverId).then(server => {
+      if (server && server.sshEnabled) {
+        removeSipTrunk(server, existing).catch(err => log(`Provisionamento falhou: ${err.message}`));
+      }
+    }).catch(() => {});
     res.status(204).send();
   });
 
@@ -1219,6 +1268,11 @@ export async function registerRoutes(
     const data = { ...result.data, companyId };
     try {
       const menu = await storage.createIvrMenu(data);
+      storage.getServer(menu.serverId).then(server => {
+        if (server && server.sshEnabled) {
+          provisionIvrMenu(server, menu).catch(err => log(`Provisionamento falhou: ${err.message}`));
+        }
+      }).catch(() => {});
       res.status(201).json(menu);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1243,6 +1297,11 @@ export async function registerRoutes(
     try {
       const menu = await storage.updateIvrMenu(req.params.id, data);
       if (!menu) return res.status(404).json({ message: "Menu IVR não encontrado" });
+      storage.getServer(menu.serverId).then(server => {
+        if (server && server.sshEnabled) {
+          provisionIvrMenu(server, menu).catch(err => log(`Provisionamento falhou: ${err.message}`));
+        }
+      }).catch(() => {});
       res.json(menu);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1259,6 +1318,11 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Acesso negado" });
     }
     await storage.deleteIvrMenu(req.params.id);
+    storage.getServer(existing.serverId).then(server => {
+      if (server && server.sshEnabled) {
+        removeIvrMenu(server, existing).catch(err => log(`Provisionamento falhou: ${err.message}`));
+      }
+    }).catch(() => {});
     res.status(204).send();
   });
 
@@ -1291,6 +1355,11 @@ export async function registerRoutes(
     const data = { ...result.data, companyId };
     try {
       const queue = await storage.createQueue(data);
+      storage.getServer(queue.serverId).then(server => {
+        if (server && server.sshEnabled) {
+          provisionQueue(server, queue).catch(err => log(`Provisionamento falhou: ${err.message}`));
+        }
+      }).catch(() => {});
       res.status(201).json(queue);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1315,6 +1384,11 @@ export async function registerRoutes(
     try {
       const queue = await storage.updateQueue(req.params.id, data);
       if (!queue) return res.status(404).json({ message: "Fila não encontrada" });
+      storage.getServer(queue.serverId).then(server => {
+        if (server && server.sshEnabled) {
+          provisionQueue(server, queue).catch(err => log(`Provisionamento falhou: ${err.message}`));
+        }
+      }).catch(() => {});
       res.json(queue);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1331,6 +1405,11 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Acesso negado" });
     }
     await storage.deleteQueue(req.params.id);
+    storage.getServer(existing.serverId).then(server => {
+      if (server && server.sshEnabled) {
+        removeQueue(server, existing).catch(err => log(`Provisionamento falhou: ${err.message}`));
+      }
+    }).catch(() => {});
     res.status(204).send();
   });
 
@@ -1479,6 +1558,11 @@ export async function registerRoutes(
       const data = insertDidSchema.parse(req.body);
       if (!canAccessCompany(req, data.companyId)) return res.status(403).json({ message: "Acesso negado" });
       const created = await storage.createDid(data);
+      storage.getServer(created.serverId).then(server => {
+        if (server && server.sshEnabled) {
+          provisionDid(server, created).catch(err => log(`Provisionamento falhou: ${err.message}`));
+        }
+      }).catch(() => {});
       res.status(201).json(created);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1492,6 +1576,13 @@ export async function registerRoutes(
       if (!existing) return res.status(404).json({ message: "DID não encontrado" });
       if (!canAccessCompany(req, existing.companyId)) return res.status(403).json({ message: "Acesso negado" });
       const updated = await storage.updateDid(req.params.id, req.body);
+      if (updated) {
+        storage.getServer(updated.serverId).then(server => {
+          if (server && server.sshEnabled) {
+            provisionDid(server, updated).catch(err => log(`Provisionamento falhou: ${err.message}`));
+          }
+        }).catch(() => {});
+      }
       res.json(updated);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1504,6 +1595,11 @@ export async function registerRoutes(
     if (!existing) return res.status(404).json({ message: "DID não encontrado" });
     if (!canAccessCompany(req, existing.companyId)) return res.status(403).json({ message: "Acesso negado" });
     await storage.deleteDid(req.params.id);
+    storage.getServer(existing.serverId).then(server => {
+      if (server && server.sshEnabled) {
+        removeDid(server, existing).catch(err => log(`Provisionamento falhou: ${err.message}`));
+      }
+    }).catch(() => {});
     res.status(204).send();
   });
 
@@ -1528,6 +1624,13 @@ export async function registerRoutes(
       const data = insertCallerIdRuleSchema.parse(req.body);
       if (!canAccessCompany(req, data.companyId)) return res.status(403).json({ message: "Acesso negado" });
       const created = await storage.createCallerIdRule(data);
+      const allRules = await storage.getCallerIdRules(created.companyId);
+      const serverRules = allRules.filter(r => r.serverId === created.serverId);
+      storage.getServer(created.serverId).then(server => {
+        if (server && server.sshEnabled) {
+          provisionCallerIdRules(server, serverRules).catch(err => log(`Provisionamento CallerID falhou: ${err.message}`));
+        }
+      }).catch(() => {});
       res.status(201).json(created);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1541,6 +1644,15 @@ export async function registerRoutes(
       if (!existing) return res.status(404).json({ message: "Regra não encontrada" });
       if (!canAccessCompany(req, existing.companyId)) return res.status(403).json({ message: "Acesso negado" });
       const updated = await storage.updateCallerIdRule(req.params.id, req.body);
+      if (updated) {
+        const allRules = await storage.getCallerIdRules(updated.companyId);
+        const serverRules = allRules.filter(r => r.serverId === updated.serverId);
+        storage.getServer(updated.serverId).then(server => {
+          if (server && server.sshEnabled) {
+            provisionCallerIdRules(server, serverRules).catch(err => log(`Provisionamento CallerID falhou: ${err.message}`));
+          }
+        }).catch(() => {});
+      }
       res.json(updated);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1553,6 +1665,13 @@ export async function registerRoutes(
     if (!existing) return res.status(404).json({ message: "Regra não encontrada" });
     if (!canAccessCompany(req, existing.companyId)) return res.status(403).json({ message: "Acesso negado" });
     await storage.deleteCallerIdRule(req.params.id);
+    const allRules = await storage.getCallerIdRules(existing.companyId);
+    const serverRules = allRules.filter(r => r.serverId === existing.serverId);
+    storage.getServer(existing.serverId).then(server => {
+      if (server && server.sshEnabled) {
+        provisionCallerIdRules(server, serverRules).catch(err => log(`Provisionamento CallerID falhou: ${err.message}`));
+      }
+    }).catch(() => {});
     res.status(204).send();
   });
 
@@ -1624,6 +1743,11 @@ export async function registerRoutes(
     });
     if (!parsed.success) return res.status(400).json({ message: "Dados inválidos", errors: parsed.error.flatten() });
     const room = await storage.createConferenceRoom(parsed.data);
+    storage.getServer(room.serverId).then(server => {
+      if (server && server.sshEnabled) {
+        provisionConferenceRoom(server, room).catch(err => log(`Provisionamento falhou: ${err.message}`));
+      }
+    }).catch(() => {});
     await logActivity(req, "create", "conference", room.id, `Sala criada: ${room.name}`);
     res.status(201).json(room);
   });
@@ -1635,6 +1759,11 @@ export async function registerRoutes(
       companyId: enforceCompanyId(req, req.body.companyId),
     });
     if (!updated) return res.status(404).json({ message: "Sala não encontrada" });
+    storage.getServer(updated.serverId).then(server => {
+      if (server && server.sshEnabled) {
+        provisionConferenceRoom(server, updated).catch(err => log(`Provisionamento falhou: ${err.message}`));
+      }
+    }).catch(() => {});
     await logActivity(req, "update", "conference", updated.id, `Sala atualizada: ${updated.name}`);
     res.json(updated);
   });
@@ -1644,6 +1773,13 @@ export async function registerRoutes(
     const room = await storage.getConferenceRoom(req.params.id);
     if (room) await logActivity(req, "delete", "conference", req.params.id, `Sala excluída: ${room.name}`);
     await storage.deleteConferenceRoom(req.params.id);
+    if (room) {
+      storage.getServer(room.serverId).then(server => {
+        if (server && server.sshEnabled) {
+          removeConferenceRoom(server, room).catch(err => log(`Provisionamento falhou: ${err.message}`));
+        }
+      }).catch(() => {});
+    }
     res.json({ success: true });
   });
 
@@ -1725,6 +1861,13 @@ export async function registerRoutes(
     });
     if (!parsed.success) return res.status(400).json({ message: "Dados inválidos", errors: parsed.error.flatten() });
     const dial = await storage.createSpeedDial(parsed.data);
+    const allDials = await storage.getSpeedDials(dial.companyId);
+    const serverDials = allDials.filter(d => d.serverId === dial.serverId);
+    storage.getServer(dial.serverId).then(server => {
+      if (server && server.sshEnabled) {
+        provisionSpeedDials(server, serverDials).catch(err => log(`Provisionamento SpeedDial falhou: ${err.message}`));
+      }
+    }).catch(() => {});
     await logActivity(req, "create", "speedDial", dial.id, `Speed Dial criado: ${dial.label}`);
     res.status(201).json(dial);
   });
@@ -1735,6 +1878,13 @@ export async function registerRoutes(
       companyId: enforceCompanyId(req, req.body.companyId),
     });
     if (!updated) return res.status(404).json({ message: "Speed Dial não encontrado" });
+    const allDials = await storage.getSpeedDials(updated.companyId);
+    const serverDials = allDials.filter(d => d.serverId === updated.serverId);
+    storage.getServer(updated.serverId).then(server => {
+      if (server && server.sshEnabled) {
+        provisionSpeedDials(server, serverDials).catch(err => log(`Provisionamento SpeedDial falhou: ${err.message}`));
+      }
+    }).catch(() => {});
     await logActivity(req, "update", "speedDial", updated.id, `Speed Dial atualizado: ${updated.label}`);
     res.json(updated);
   });
@@ -1744,7 +1894,83 @@ export async function registerRoutes(
     const dial = await storage.getSpeedDial(req.params.id);
     if (dial) await logActivity(req, "delete", "speedDial", req.params.id, `Speed Dial excluído: ${dial.label}`);
     await storage.deleteSpeedDial(req.params.id);
+    if (dial) {
+      const allDials = await storage.getSpeedDials(dial.companyId);
+      const serverDials = allDials.filter(d => d.serverId === dial.serverId);
+      storage.getServer(dial.serverId).then(server => {
+        if (server && server.sshEnabled) {
+          provisionSpeedDials(server, serverDials).catch(err => log(`Provisionamento SpeedDial falhou: ${err.message}`));
+        }
+      }).catch(() => {});
+    }
     res.json({ success: true });
+  });
+
+  // === COMPARE SERVER DATA ===
+  app.get("/api/servers/:id/compare", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    try {
+      const server = await storage.getServer(req.params.id);
+      if (!server) return res.status(404).json({ message: "Servidor não encontrado" });
+      if (!canAccessCompany(req, server.companyId)) return res.status(403).json({ message: "Acesso negado" });
+
+      const companyId = getCompanyFilter(req);
+      const [extensions, trunks, queues, conferences] = await Promise.all([
+        storage.getExtensions(companyId),
+        storage.getSipTrunks(companyId),
+        storage.getQueues(companyId),
+        storage.getConferenceRooms(companyId),
+      ]);
+
+      const result = await compareServerData(server, extensions, trunks, queues, conferences);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/servers/:id/import-extensions", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    try {
+      const server = await storage.getServer(req.params.id);
+      if (!server) return res.status(404).json({ message: "Servidor não encontrado" });
+      if (!canAccessCompany(req, server.companyId)) return res.status(403).json({ message: "Acesso negado" });
+
+      const { extensionNames } = req.body;
+      if (!extensionNames || !Array.isArray(extensionNames)) {
+        return res.status(400).json({ message: "extensionNames é obrigatório" });
+      }
+
+      const companyId = enforceCompanyId(req, server.companyId);
+      if (!companyId) return res.status(400).json({ message: "Empresa obrigatória" });
+
+      const imported = await importExtensionsFromServer(server, extensionNames, companyId);
+      
+      const created = [];
+      for (const ext of imported) {
+        try {
+          const existing = await storage.getExtensionsByServer(server.id);
+          if (existing.some(e => e.number === ext.number)) continue;
+          
+          const newExt = await storage.createExtension({
+            number: ext.number,
+            name: ext.name,
+            protocol: ext.protocol as any,
+            secret: Math.random().toString(36).slice(2, 10),
+            context: "internal",
+            companyId,
+            serverId: server.id,
+          });
+          created.push(newExt);
+        } catch (err: any) {
+          log(`Falha ao importar ramal ${ext.number}: ${err.message}`);
+        }
+      }
+
+      res.json({ imported: created.length, extensions: created });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   // === VOICEMAIL: List via AMI ===
