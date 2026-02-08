@@ -203,6 +203,34 @@ export const callerIdRules = pgTable("caller_id_rules", {
   serverId: varchar("server_id"),
 });
 
+export const conferenceRooms = pgTable("conference_rooms", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  roomNumber: text("room_number").notNull(),
+  pin: text("pin"),
+  adminPin: text("admin_pin"),
+  maxParticipants: integer("max_participants").notNull().default(50),
+  recordConference: boolean("record_conference").notNull().default(false),
+  musicOnHold: text("music_on_hold").default("default"),
+  announceJoinLeave: boolean("announce_join_leave").notNull().default(true),
+  waitForLeader: boolean("wait_for_leader").notNull().default(false),
+  quietMode: boolean("quiet_mode").notNull().default(false),
+  active: boolean("active").notNull().default(true),
+  companyId: varchar("company_id").notNull(),
+  serverId: varchar("server_id").notNull(),
+});
+
+export const speedDials = pgTable("speed_dials", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  label: text("label").notNull(),
+  number: text("number").notNull(),
+  extension: text("extension"),
+  blf: boolean("blf").notNull().default(false),
+  position: integer("position").notNull().default(0),
+  companyId: varchar("company_id").notNull(),
+  serverId: varchar("server_id"),
+});
+
 export const contacts = pgTable("contacts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -252,6 +280,8 @@ export const insertQueueSchema = createInsertSchema(queues).omit({ id: true });
 export const insertCallLogSchema = createInsertSchema(callLogs).omit({ id: true });
 export const insertDidSchema = createInsertSchema(dids).omit({ id: true });
 export const insertCallerIdRuleSchema = createInsertSchema(callerIdRules).omit({ id: true });
+export const insertConferenceRoomSchema = createInsertSchema(conferenceRooms).omit({ id: true });
+export const insertSpeedDialSchema = createInsertSchema(speedDials).omit({ id: true });
 export const insertContactSchema = createInsertSchema(contacts).omit({ id: true });
 export const insertActivityLogSchema = createInsertSchema(activityLogs).omit({ id: true, createdAt: true });
 
@@ -275,6 +305,10 @@ export type InsertDid = z.infer<typeof insertDidSchema>;
 export type Did = typeof dids.$inferSelect;
 export type InsertCallerIdRule = z.infer<typeof insertCallerIdRuleSchema>;
 export type CallerIdRule = typeof callerIdRules.$inferSelect;
+export type InsertConferenceRoom = z.infer<typeof insertConferenceRoomSchema>;
+export type ConferenceRoom = typeof conferenceRooms.$inferSelect;
+export type InsertSpeedDial = z.infer<typeof insertSpeedDialSchema>;
+export type SpeedDial = typeof speedDials.$inferSelect;
 export type InsertContact = z.infer<typeof insertContactSchema>;
 export type Contact = typeof contacts.$inferSelect;
 export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;

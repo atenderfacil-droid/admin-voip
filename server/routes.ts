@@ -14,6 +14,8 @@ import {
   insertUserSchema,
   insertDidSchema,
   insertCallerIdRuleSchema,
+  insertConferenceRoomSchema,
+  insertSpeedDialSchema,
   insertContactSchema,
   type User,
   type Server as ServerType,
@@ -1605,6 +1607,237 @@ export async function registerRoutes(
       hourlyCount,
       dailyCount,
     });
+  });
+
+  // === CONFERENCE ROOMS CRUD ===
+  app.get("/api/conference-rooms", requireAuth, async (req, res) => {
+    const companyId = getCompanyFilter(req);
+    const result = await storage.getConferenceRooms(companyId);
+    res.json(result);
+  });
+
+  app.post("/api/conference-rooms", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    const parsed = insertConferenceRoomSchema.safeParse({
+      ...req.body,
+      companyId: enforceCompanyId(req, req.body.companyId),
+    });
+    if (!parsed.success) return res.status(400).json({ message: "Dados inválidos", errors: parsed.error.flatten() });
+    const room = await storage.createConferenceRoom(parsed.data);
+    await logActivity(req, "create", "conference", room.id, `Sala criada: ${room.name}`);
+    res.status(201).json(room);
+  });
+
+  app.put("/api/conference-rooms/:id", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    const updated = await storage.updateConferenceRoom(req.params.id, {
+      ...req.body,
+      companyId: enforceCompanyId(req, req.body.companyId),
+    });
+    if (!updated) return res.status(404).json({ message: "Sala não encontrada" });
+    await logActivity(req, "update", "conference", updated.id, `Sala atualizada: ${updated.name}`);
+    res.json(updated);
+  });
+
+  app.delete("/api/conference-rooms/:id", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    const room = await storage.getConferenceRoom(req.params.id);
+    if (room) await logActivity(req, "delete", "conference", req.params.id, `Sala excluída: ${room.name}`);
+    await storage.deleteConferenceRoom(req.params.id);
+    res.json({ success: true });
+  });
+
+  // === CONFERENCE ROOMS: Live status via AMI (ConfBridge) ===
+  app.get("/api/servers/:id/ami/confbridge-list", requireAuth, async (req, res) => {
+    try {
+      const { ami } = await getAMIClient(req.params.id, req);
+      try {
+        const result = await ami.sendAction({ Action: "ConfbridgeListRooms" });
+        res.json(result);
+      } finally {
+        ami.disconnect();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/confbridge-kick", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    const { conference, channel } = req.body;
+    try {
+      const { ami } = await getAMIClient(req.params.id, req);
+      try {
+        const result = await ami.sendAction({ Action: "ConfbridgeKick", Conference: conference, Channel: channel });
+        res.json(result);
+      } finally {
+        ami.disconnect();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/confbridge-mute", requireAuth, async (req, res) => {
+    const { conference, channel, mute } = req.body;
+    try {
+      const { ami } = await getAMIClient(req.params.id, req);
+      try {
+        const action = mute ? "ConfbridgeMute" : "ConfbridgeUnmute";
+        const result = await ami.sendAction({ Action: action, Conference: conference, Channel: channel });
+        res.json(result);
+      } finally {
+        ami.disconnect();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/confbridge-lock", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    const { conference, lock } = req.body;
+    try {
+      const { ami } = await getAMIClient(req.params.id, req);
+      try {
+        const action = lock ? "ConfbridgeLock" : "ConfbridgeUnlock";
+        const result = await ami.sendAction({ Action: action, Conference: conference });
+        res.json(result);
+      } finally {
+        ami.disconnect();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === SPEED DIAL / BLF CRUD ===
+  app.get("/api/speed-dials", requireAuth, async (req, res) => {
+    const companyId = getCompanyFilter(req);
+    const result = await storage.getSpeedDials(companyId);
+    res.json(result);
+  });
+
+  app.post("/api/speed-dials", requireAuth, async (req, res) => {
+    const parsed = insertSpeedDialSchema.safeParse({
+      ...req.body,
+      companyId: enforceCompanyId(req, req.body.companyId),
+    });
+    if (!parsed.success) return res.status(400).json({ message: "Dados inválidos", errors: parsed.error.flatten() });
+    const dial = await storage.createSpeedDial(parsed.data);
+    await logActivity(req, "create", "speedDial", dial.id, `Speed Dial criado: ${dial.label}`);
+    res.status(201).json(dial);
+  });
+
+  app.put("/api/speed-dials/:id", requireAuth, async (req, res) => {
+    const updated = await storage.updateSpeedDial(req.params.id, {
+      ...req.body,
+      companyId: enforceCompanyId(req, req.body.companyId),
+    });
+    if (!updated) return res.status(404).json({ message: "Speed Dial não encontrado" });
+    await logActivity(req, "update", "speedDial", updated.id, `Speed Dial atualizado: ${updated.label}`);
+    res.json(updated);
+  });
+
+  app.delete("/api/speed-dials/:id", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    const dial = await storage.getSpeedDial(req.params.id);
+    if (dial) await logActivity(req, "delete", "speedDial", req.params.id, `Speed Dial excluído: ${dial.label}`);
+    await storage.deleteSpeedDial(req.params.id);
+    res.json({ success: true });
+  });
+
+  // === VOICEMAIL: List via AMI ===
+  app.get("/api/servers/:id/ami/voicemail-list", requireAuth, async (req, res) => {
+    try {
+      const { ami } = await getAMIClient(req.params.id, req);
+      try {
+        const result = await ami.sendAction({ Action: "VoicemailUsersList" });
+        res.json(result);
+      } finally {
+        ami.disconnect();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === VOICEMAIL: List messages via SSH ===
+  app.get("/api/servers/:id/voicemail-messages", requireAuth, async (req, res) => {
+    try {
+      const { client } = await getSSHClient(req.params.id, req);
+      try {
+        const vmPath = "/var/spool/asterisk/voicemail";
+        const result = await execSSHCommand(client, `find ${vmPath} -name "msg*.txt" -o -name "msg*.wav" -o -name "msg*.WAV" 2>/dev/null | head -500`);
+        const files = result.split("\n").filter(Boolean);
+        const messages: any[] = [];
+        const txtFiles = files.filter(f => f.endsWith(".txt"));
+        for (const txtFile of txtFiles.slice(0, 100)) {
+          try {
+            const content = await execSSHCommand(client, `cat "${txtFile}" 2>/dev/null`);
+            const parts = txtFile.split("/");
+            const context = parts[parts.indexOf("voicemail") + 1] || "default";
+            const mailbox = parts[parts.indexOf("voicemail") + 2] || "";
+            const folder = parts[parts.indexOf("voicemail") + 3] || "";
+            const callerid = content.match(/callerid=(.*)/)?.[1] || "";
+            const origtime = content.match(/origtime=(.*)/)?.[1] || "";
+            const duration = content.match(/duration=(.*)/)?.[1] || "0";
+            const msgnum = txtFile.match(/msg(\d+)\.txt/)?.[1] || "";
+            const wavFile = txtFile.replace(".txt", ".wav");
+            const hasAudio = files.includes(wavFile);
+            messages.push({ context, mailbox, folder, callerid, origtime, duration: parseInt(duration), msgnum, txtFile, wavFile: hasAudio ? wavFile : null });
+          } catch {}
+        }
+        client.end();
+        res.json({ messages });
+      } catch (err: any) {
+        client.end();
+        res.status(500).json({ message: err.message });
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === VOICEMAIL: Stream audio file ===
+  app.get("/api/servers/:id/voicemail-messages/download", requireAuth, async (req, res) => {
+    try {
+      const filePath = req.query.file as string;
+      if (!filePath) return res.status(400).json({ message: "Parâmetro file é obrigatório" });
+      const { client } = await getSSHClient(req.params.id, req);
+      const sftp = await new Promise<any>((resolve, reject) => {
+        client.sftp((err: any, sftp: any) => {
+          if (err) { client.end(); reject(err); return; }
+          resolve(sftp);
+        });
+      });
+      const stream = sftp.createReadStream(filePath);
+      const fileName = filePath.split("/").pop() || "voicemail.wav";
+      res.setHeader("Content-Type", "audio/wav");
+      res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
+      stream.pipe(res);
+      stream.on("end", () => client.end());
+      stream.on("error", () => { client.end(); res.status(500).end(); });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === VOICEMAIL: Delete message ===
+  app.delete("/api/servers/:id/voicemail-messages", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    try {
+      const filePath = req.query.file as string;
+      if (!filePath) return res.status(400).json({ message: "Parâmetro file é obrigatório" });
+      const { client } = await getSSHClient(req.params.id, req);
+      const basePath = filePath.replace(/\.(txt|wav|WAV)$/, "");
+      await execSSHCommand(client, `rm -f "${basePath}".* 2>/dev/null`);
+      client.end();
+      await logActivity(req, "delete", "voicemail", null, `Voicemail excluído: ${filePath}`);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   // === CONTACTS CRUD ===

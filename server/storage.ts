@@ -11,6 +11,8 @@ import {
   callLogs,
   dids,
   callerIdRules,
+  conferenceRooms,
+  speedDials,
   contacts,
   activityLogs,
   type User,
@@ -33,6 +35,10 @@ import {
   type InsertDid,
   type CallerIdRule,
   type InsertCallerIdRule,
+  type ConferenceRoom,
+  type InsertConferenceRoom,
+  type SpeedDial,
+  type InsertSpeedDial,
   type Contact,
   type InsertContact,
   type ActivityLog,
@@ -107,6 +113,18 @@ export interface IStorage {
   createCallerIdRule(rule: InsertCallerIdRule): Promise<CallerIdRule>;
   updateCallerIdRule(id: string, rule: Partial<InsertCallerIdRule>): Promise<CallerIdRule | undefined>;
   deleteCallerIdRule(id: string): Promise<void>;
+
+  getConferenceRooms(companyId?: string): Promise<ConferenceRoom[]>;
+  getConferenceRoom(id: string): Promise<ConferenceRoom | undefined>;
+  createConferenceRoom(room: InsertConferenceRoom): Promise<ConferenceRoom>;
+  updateConferenceRoom(id: string, room: Partial<InsertConferenceRoom>): Promise<ConferenceRoom | undefined>;
+  deleteConferenceRoom(id: string): Promise<void>;
+
+  getSpeedDials(companyId?: string): Promise<SpeedDial[]>;
+  getSpeedDial(id: string): Promise<SpeedDial | undefined>;
+  createSpeedDial(dial: InsertSpeedDial): Promise<SpeedDial>;
+  updateSpeedDial(id: string, dial: Partial<InsertSpeedDial>): Promise<SpeedDial | undefined>;
+  deleteSpeedDial(id: string): Promise<void>;
 
   getContacts(companyId?: string): Promise<Contact[]>;
   getContact(id: string): Promise<Contact | undefined>;
@@ -403,6 +421,58 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCallerIdRule(id: string): Promise<void> {
     await db.delete(callerIdRules).where(eq(callerIdRules.id, id));
+  }
+
+  async getConferenceRooms(companyId?: string): Promise<ConferenceRoom[]> {
+    if (companyId) {
+      return db.select().from(conferenceRooms).where(eq(conferenceRooms.companyId, companyId));
+    }
+    return db.select().from(conferenceRooms);
+  }
+
+  async getConferenceRoom(id: string): Promise<ConferenceRoom | undefined> {
+    const [room] = await db.select().from(conferenceRooms).where(eq(conferenceRooms.id, id));
+    return room;
+  }
+
+  async createConferenceRoom(room: InsertConferenceRoom): Promise<ConferenceRoom> {
+    const [created] = await db.insert(conferenceRooms).values(room).returning();
+    return created;
+  }
+
+  async updateConferenceRoom(id: string, room: Partial<InsertConferenceRoom>): Promise<ConferenceRoom | undefined> {
+    const [updated] = await db.update(conferenceRooms).set(room).where(eq(conferenceRooms.id, id)).returning();
+    return updated;
+  }
+
+  async deleteConferenceRoom(id: string): Promise<void> {
+    await db.delete(conferenceRooms).where(eq(conferenceRooms.id, id));
+  }
+
+  async getSpeedDials(companyId?: string): Promise<SpeedDial[]> {
+    if (companyId) {
+      return db.select().from(speedDials).where(eq(speedDials.companyId, companyId));
+    }
+    return db.select().from(speedDials);
+  }
+
+  async getSpeedDial(id: string): Promise<SpeedDial | undefined> {
+    const [dial] = await db.select().from(speedDials).where(eq(speedDials.id, id));
+    return dial;
+  }
+
+  async createSpeedDial(dial: InsertSpeedDial): Promise<SpeedDial> {
+    const [created] = await db.insert(speedDials).values(dial).returning();
+    return created;
+  }
+
+  async updateSpeedDial(id: string, dial: Partial<InsertSpeedDial>): Promise<SpeedDial | undefined> {
+    const [updated] = await db.update(speedDials).set(dial).where(eq(speedDials.id, id)).returning();
+    return updated;
+  }
+
+  async deleteSpeedDial(id: string): Promise<void> {
+    await db.delete(speedDials).where(eq(speedDials.id, id));
   }
 
   async getContacts(companyId?: string): Promise<Contact[]> {
