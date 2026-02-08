@@ -13,6 +13,7 @@ import {
   Trash2,
   Clock,
   Globe,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -261,6 +262,9 @@ export default function Dids() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={() => { queryClient.invalidateQueries({ queryKey: ["/api/dids"] }); }} data-testid="button-refresh">
+            <RefreshCw className="w-4 h-4 mr-2" /> Atualizar
+          </Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button onClick={openCreate} data-testid="button-add-did">

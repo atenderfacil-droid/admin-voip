@@ -12,6 +12,7 @@ import {
   Phone,
   Hash,
   Server,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -241,13 +242,17 @@ export default function SpeedDials() {
             Gerenciar teclas de discagem rápida e BLF
           </p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openCreate} data-testid="button-add-speed-dial">
-              <Plus className="w-4 h-4 mr-2" /> Novo Speed Dial
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => { queryClient.invalidateQueries({ queryKey: ["/api/speed-dials"] }); }} data-testid="button-refresh">
+            <RefreshCw className="w-4 h-4 mr-2" /> Atualizar
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={openCreate} data-testid="button-add-speed-dial">
+                <Plus className="w-4 h-4 mr-2" /> Novo Speed Dial
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editing ? "Editar Speed Dial" : "Novo Speed Dial"}</DialogTitle>
             </DialogHeader>
@@ -372,6 +377,7 @@ export default function SpeedDials() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {sorted.length === 0 ? (

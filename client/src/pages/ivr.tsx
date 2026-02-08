@@ -14,6 +14,7 @@ import {
   Pause,
   FileEdit,
   Hash,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -202,13 +203,17 @@ export default function IVR() {
           <h1 className="text-xl font-bold tracking-tight">IVR / URA</h1>
           <p className="text-sm text-muted-foreground">Gerencie os menus de atendimento automático</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openCreate} data-testid="button-add-ivr">
-              <Plus className="w-4 h-4 mr-2" /> Novo Menu IVR
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => { queryClient.invalidateQueries({ queryKey: ["/api/ivr-menus"] }); }} data-testid="button-refresh">
+            <RefreshCw className="w-4 h-4 mr-2" /> Atualizar
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={openCreate} data-testid="button-add-ivr">
+                <Plus className="w-4 h-4 mr-2" /> Novo Menu IVR
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editing ? "Editar Menu IVR" : "Novo Menu IVR"}</DialogTitle>
             </DialogHeader>
@@ -351,6 +356,7 @@ export default function IVR() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="relative max-w-sm">

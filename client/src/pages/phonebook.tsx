@@ -16,6 +16,7 @@ import {
   Mail,
   Building2,
   User,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -244,10 +245,14 @@ export default function Phonebook() {
             Gerencie seus contatos e favoritos
           </p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openCreate} data-testid="button-add-contact">
-              <Plus className="w-4 h-4 mr-2" /> Novo Contato
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => { queryClient.invalidateQueries({ queryKey: ["/api/contacts"] }); }} data-testid="button-refresh">
+            <RefreshCw className="w-4 h-4 mr-2" /> Atualizar
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={openCreate} data-testid="button-add-contact">
+                <Plus className="w-4 h-4 mr-2" /> Novo Contato
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
@@ -374,6 +379,7 @@ export default function Phonebook() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="relative max-w-sm">

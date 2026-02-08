@@ -15,6 +15,7 @@ import {
   XCircle,
   AlertCircle,
   Ban,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -193,13 +194,17 @@ export default function SipTrunks() {
           <h1 className="text-xl font-bold tracking-tight">Troncos SIP</h1>
           <p className="text-sm text-muted-foreground">Gerencie as conexões com operadoras e provedores VoIP</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openCreate} data-testid="button-add-trunk">
-              <Plus className="w-4 h-4 mr-2" /> Novo Tronco SIP
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => { queryClient.invalidateQueries({ queryKey: ["/api/sip-trunks"] }); }} data-testid="button-refresh">
+            <RefreshCw className="w-4 h-4 mr-2" /> Atualizar
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={openCreate} data-testid="button-add-trunk">
+                <Plus className="w-4 h-4 mr-2" /> Novo Tronco SIP
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editing ? "Editar Tronco SIP" : "Novo Tronco SIP"}</DialogTitle>
             </DialogHeader>
@@ -329,6 +334,7 @@ export default function SipTrunks() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="relative max-w-sm">

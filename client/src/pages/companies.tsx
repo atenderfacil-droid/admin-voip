@@ -15,6 +15,7 @@ import {
   Users,
   Crown,
   Server as ServerIcon,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -199,13 +200,17 @@ export default function Companies() {
           <h1 className="text-xl font-bold tracking-tight">Empresas</h1>
           <p className="text-sm text-muted-foreground">Gerencie as empresas e clientes da plataforma</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openCreate} data-testid="button-add-company">
-              <Plus className="w-4 h-4 mr-2" /> Nova Empresa
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => { queryClient.invalidateQueries({ queryKey: ["/api/companies"] }); }} data-testid="button-refresh">
+            <RefreshCw className="w-4 h-4 mr-2" /> Atualizar
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={openCreate} data-testid="button-add-company">
+                <Plus className="w-4 h-4 mr-2" /> Nova Empresa
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>{editingCompany ? "Editar Empresa" : "Nova Empresa"}</DialogTitle>
             </DialogHeader>
@@ -309,6 +314,7 @@ export default function Companies() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="relative max-w-sm">

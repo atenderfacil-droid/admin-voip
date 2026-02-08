@@ -240,13 +240,17 @@ export default function Queues() {
           <h1 className="text-xl font-bold tracking-tight">Filas de Atendimento</h1>
           <p className="text-sm text-muted-foreground">Gerencie filas de chamadas do Asterisk</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openCreate} data-testid="button-add-queue">
-              <Plus className="w-4 h-4 mr-2" /> Nova Fila
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => { queryClient.invalidateQueries({ queryKey: ["/api/queues"] }); }} data-testid="button-refresh">
+            <RefreshCw className="w-4 h-4 mr-2" /> Atualizar
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={openCreate} data-testid="button-add-queue">
+                <Plus className="w-4 h-4 mr-2" /> Nova Fila
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editing ? "Editar Fila" : "Nova Fila"}</DialogTitle>
             </DialogHeader>
@@ -407,6 +411,7 @@ export default function Queues() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="flex items-center gap-4 flex-wrap">

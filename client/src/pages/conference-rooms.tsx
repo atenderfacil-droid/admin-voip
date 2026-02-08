@@ -14,6 +14,7 @@ import {
   Mic,
   MicOff,
   Volume2,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -255,13 +256,17 @@ export default function ConferenceRooms() {
           <h1 className="text-xl font-bold tracking-tight">Salas de Conferência</h1>
           <p className="text-sm text-muted-foreground">Gerencie salas de conferência ConfBridge</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openCreate} data-testid="button-add-conference-room">
-              <Plus className="w-4 h-4 mr-2" /> Nova Sala
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => { queryClient.invalidateQueries({ queryKey: ["/api/conference-rooms"] }); }} data-testid="button-refresh">
+            <RefreshCw className="w-4 h-4 mr-2" /> Atualizar
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={openCreate} data-testid="button-add-conference-room">
+                <Plus className="w-4 h-4 mr-2" /> Nova Sala
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editing ? "Editar Sala de Conferência" : "Nova Sala de Conferência"}</DialogTitle>
             </DialogHeader>
@@ -415,6 +420,7 @@ export default function ConferenceRooms() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {!rooms || rooms.length === 0 ? (
