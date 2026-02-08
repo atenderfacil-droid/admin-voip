@@ -37,6 +37,8 @@ export const companies = pgTable("companies", {
   serverId: varchar("server_id"),
 });
 
+export const sshAuthMethodEnum = pgEnum("ssh_auth_method", ["password", "privatekey"]);
+
 export const servers = pgTable("servers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -52,6 +54,13 @@ export const servers = pgTable("servers", {
   amiUsername: text("ami_username"),
   amiPassword: text("ami_password"),
   amiEnabled: boolean("ami_enabled").notNull().default(false),
+  sshEnabled: boolean("ssh_enabled").notNull().default(false),
+  sshHost: text("ssh_host"),
+  sshPort: integer("ssh_port").notNull().default(22),
+  sshUsername: text("ssh_username"),
+  sshAuthMethod: sshAuthMethodEnum("ssh_auth_method").notNull().default("password"),
+  sshPassword: text("ssh_password"),
+  sshPrivateKey: text("ssh_private_key"),
 });
 
 export const extensions = pgTable("extensions", {

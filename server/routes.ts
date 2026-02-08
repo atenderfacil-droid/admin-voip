@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcrypt";
-import { createAMIClient } from "./asterisk";
+import { createAMIClient, type SSHConfig } from "./asterisk";
 import {
   insertCompanySchema,
   insertServerSchema,
@@ -71,7 +71,30 @@ async function getAMIClient(serverId: string, req: Request) {
   if (!server.amiEnabled || !server.amiUsername || !server.amiPassword) {
     throw new Error("AMI não configurado neste servidor");
   }
-  return { ami: createAMIClient(server.ipAddress, server.amiPort, server.amiUsername, server.amiPassword), server };
+
+  let sshConfig: SSHConfig | undefined;
+  if (server.sshEnabled) {
+    if (!server.sshUsername) {
+      throw new Error("SSH habilitado mas usuário SSH não configurado");
+    }
+    if (server.sshAuthMethod === "password" && !server.sshPassword) {
+      throw new Error("SSH habilitado com autenticação por senha mas senha SSH não configurada");
+    }
+    if (server.sshAuthMethod === "privatekey" && !server.sshPrivateKey) {
+      throw new Error("SSH habilitado com autenticação por chave mas chave privada não configurada");
+    }
+    sshConfig = {
+      enabled: true,
+      host: server.sshHost || server.ipAddress,
+      port: server.sshPort || 22,
+      username: server.sshUsername,
+      authMethod: server.sshAuthMethod || "password",
+      password: server.sshPassword || undefined,
+      privateKey: server.sshPrivateKey || undefined,
+    };
+  }
+
+  return { ami: createAMIClient(server.ipAddress, server.amiPort, server.amiUsername, server.amiPassword, sshConfig), server };
 }
 
 export async function registerRoutes(

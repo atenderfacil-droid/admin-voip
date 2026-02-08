@@ -31,10 +31,13 @@ import {
   Link2,
   Unplug,
   Zap,
+  KeyRound,
+  Lock,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
@@ -62,7 +65,25 @@ const serverFormSchema = z.object({
   amiUsername: z.string().optional(),
   amiPassword: z.string().optional(),
   amiEnabled: z.boolean().default(false),
-});
+  sshEnabled: z.boolean().default(false),
+  sshHost: z.string().optional(),
+  sshPort: z.coerce.number().min(1).default(22),
+  sshUsername: z.string().optional(),
+  sshAuthMethod: z.enum(["password", "privatekey"]).default("password"),
+  sshPassword: z.string().optional(),
+  sshPrivateKey: z.string().optional(),
+}).refine((data) => {
+  if (data.sshEnabled && !data.sshUsername) return false;
+  return true;
+}, { message: "Usuário SSH é obrigatório quando SSH está habilitado", path: ["sshUsername"] })
+.refine((data) => {
+  if (data.sshEnabled && data.sshAuthMethod === "password" && !data.sshPassword) return false;
+  return true;
+}, { message: "Senha SSH é obrigatória para autenticação por senha", path: ["sshPassword"] })
+.refine((data) => {
+  if (data.sshEnabled && data.sshAuthMethod === "privatekey" && !data.sshPrivateKey) return false;
+  return true;
+}, { message: "Chave privada é obrigatória para autenticação por chave", path: ["sshPrivateKey"] });
 
 type ServerForm = z.infer<typeof serverFormSchema>;
 
@@ -607,6 +628,13 @@ export default function Servers() {
       amiUsername: "",
       amiPassword: "",
       amiEnabled: false,
+      sshEnabled: false,
+      sshHost: "",
+      sshPort: 22,
+      sshUsername: "",
+      sshAuthMethod: "password",
+      sshPassword: "",
+      sshPrivateKey: "",
     },
   });
 
@@ -681,6 +709,13 @@ export default function Servers() {
       amiUsername: server.amiUsername || "",
       amiPassword: server.amiPassword || "",
       amiEnabled: server.amiEnabled,
+      sshEnabled: server.sshEnabled || false,
+      sshHost: server.sshHost || "",
+      sshPort: server.sshPort || 22,
+      sshUsername: server.sshUsername || "",
+      sshAuthMethod: server.sshAuthMethod || "password",
+      sshPassword: server.sshPassword || "",
+      sshPrivateKey: server.sshPrivateKey || "",
     });
     setOpen(true);
   };
@@ -701,6 +736,13 @@ export default function Servers() {
       amiUsername: "",
       amiPassword: "",
       amiEnabled: false,
+      sshEnabled: false,
+      sshHost: "",
+      sshPort: 22,
+      sshUsername: "",
+      sshAuthMethod: "password",
+      sshPassword: "",
+      sshPrivateKey: "",
     });
     setOpen(true);
   };
@@ -870,6 +912,115 @@ export default function Servers() {
                   )}
                 </div>
 
+                <div className="border-t pt-4 mt-4">
+                  <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
+                    <KeyRound className="w-4 h-4 text-primary" /> Túnel SSH (Conexão Segura)
+                  </h3>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Conecte ao AMI através de um túnel SSH para maior segurança
+                  </p>
+
+                  <FormField control={form.control} name="sshEnabled" render={({ field }) => (
+                    <FormItem className="flex items-center justify-between gap-4 rounded-md border p-3 mb-3">
+                      <div>
+                        <FormLabel className="text-sm">Habilitar Túnel SSH</FormLabel>
+                        <FormDescription className="text-xs">
+                          Cria um túnel SSH criptografado antes de conectar ao AMI
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} data-testid="switch-ssh-enabled" />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+
+                  {form.watch("sshEnabled") && (
+                    <div className="space-y-3 rounded-md border p-3 bg-muted/30">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                        <Lock className="w-3.5 h-3.5 shrink-0" />
+                        <span>O túnel SSH encaminha a conexão AMI de forma segura. A porta AMI não precisa estar exposta na internet.</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <FormField control={form.control} name="sshHost" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Host SSH</FormLabel>
+                            <FormControl><Input {...field} placeholder="IP ou hostname do servidor SSH" data-testid="input-ssh-host" /></FormControl>
+                            <FormDescription className="text-[10px]">Deixe vazio para usar o IP do servidor</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="sshPort" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Porta SSH</FormLabel>
+                            <FormControl><Input type="number" {...field} data-testid="input-ssh-port" /></FormControl>
+                            <FormDescription className="text-[10px]">Porta padrão: 22</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </div>
+
+                      <FormField control={form.control} name="sshUsername" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Usuário SSH</FormLabel>
+                          <FormControl><Input {...field} placeholder="root" data-testid="input-ssh-username" /></FormControl>
+                          <FormDescription className="text-[10px]">Usuário com acesso SSH ao servidor</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+
+                      <FormField control={form.control} name="sshAuthMethod" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Método de Autenticação</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl><SelectTrigger data-testid="select-ssh-auth-method"><SelectValue /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value="password">Senha</SelectItem>
+                              <SelectItem value="privatekey">Chave Privada (RSA/Ed25519)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+
+                      {form.watch("sshAuthMethod") === "password" && (
+                        <FormField control={form.control} name="sshPassword" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Senha SSH</FormLabel>
+                            <FormControl><Input type="password" {...field} placeholder="********" data-testid="input-ssh-password" /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      )}
+
+                      {form.watch("sshAuthMethod") === "privatekey" && (
+                        <FormField control={form.control} name="sshPrivateKey" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Chave Privada SSH</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                {...field}
+                                placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}
+                                className="font-mono text-xs min-h-[120px] resize-y"
+                                data-testid="textarea-ssh-private-key"
+                              />
+                            </FormControl>
+                            <FormDescription className="text-[10px]">Cole o conteúdo da chave privada (id_rsa ou id_ed25519)</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      )}
+
+                      <div className="rounded-md bg-muted/50 p-2.5 mt-2">
+                        <p className="text-[10px] text-muted-foreground flex items-start gap-1.5">
+                          <Shield className="w-3 h-3 mt-0.5 shrink-0" />
+                          Com SSH habilitado, a conexão AMI é tunelada: SSH conecta ao servidor → encaminha a porta AMI ({form.watch("amiPort")}) localmente → AMI conecta via localhost. A porta AMI não precisa estar aberta externamente.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex justify-end gap-2 pt-2">
                   <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
                   <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} data-testid="button-submit-server">
@@ -950,7 +1101,13 @@ export default function Servers() {
                   <div className="flex items-center gap-1.5">
                     <Plug className="w-3 h-3 text-muted-foreground" />
                     <span className="text-[11px] text-muted-foreground">AMI:</span>
-                    <span className="text-[11px] font-medium">{server.amiEnabled ? `Porta ${server.amiPort}` : "Desabilitado"}</span>
+                    <span className="text-[11px] font-medium">
+                      {server.amiEnabled
+                        ? server.sshEnabled
+                          ? `SSH → :${server.amiPort}`
+                          : `Porta ${server.amiPort}`
+                        : "Desabilitado"}
+                    </span>
                   </div>
                   {server.asteriskVersion && (
                     <div className="flex items-center gap-1.5">
@@ -972,6 +1129,11 @@ export default function Servers() {
                   ) : (
                     <Badge variant="outline" className="text-[10px]">
                       <Unplug className="w-3 h-3 mr-1" /> AMI Desabilitado
+                    </Badge>
+                  )}
+                  {server.sshEnabled && (
+                    <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-600 dark:text-blue-400">
+                      <KeyRound className="w-3 h-3 mr-1" /> SSH Tunnel
                     </Badge>
                   )}
                   <div className="ml-auto">

@@ -1,4 +1,5 @@
 import * as net from "net";
+import { Client as SSHClient } from "ssh2";
 
 interface AMIResponse {
   response: string;
@@ -12,17 +13,29 @@ interface AMIEvent {
   [key: string]: any;
 }
 
+export interface SSHConfig {
+  enabled: boolean;
+  host: string;
+  port: number;
+  username: string;
+  authMethod: "password" | "privatekey";
+  password?: string;
+  privateKey?: string;
+}
+
 export class AsteriskAMI {
   private host: string;
   private port: number;
   private username: string;
   private password: string;
+  private sshConfig?: SSHConfig;
 
-  constructor(host: string, port: number, username: string, password: string) {
+  constructor(host: string, port: number, username: string, password: string, sshConfig?: SSHConfig) {
     this.host = host;
     this.port = port;
     this.username = username;
     this.password = password;
+    this.sshConfig = sshConfig;
   }
 
   private sendAction(
@@ -58,7 +71,89 @@ export class AsteriskAMI {
     return responses;
   }
 
-  private connect(): Promise<net.Socket> {
+  private connectViaSSH(): Promise<{ socket: net.Socket; sshClient: SSHClient }> {
+    return new Promise((resolve, reject) => {
+      const ssh = new SSHClient();
+      const cfg = this.sshConfig!;
+      let resolved = false;
+
+      const sshConnectConfig: any = {
+        host: cfg.host,
+        port: cfg.port,
+        username: cfg.username,
+        readyTimeout: 10000,
+      };
+
+      if (cfg.authMethod === "privatekey" && cfg.privateKey) {
+        sshConnectConfig.privateKey = cfg.privateKey;
+      } else if (cfg.password) {
+        sshConnectConfig.password = cfg.password;
+      }
+
+      ssh.on("ready", () => {
+        ssh.forwardOut("127.0.0.1", 0, "127.0.0.1", this.port, (err, stream) => {
+          if (err) {
+            ssh.end();
+            reject(new Error(`Erro no túnel SSH: ${err.message}`));
+            return;
+          }
+
+          const timeout = setTimeout(() => {
+            if (!resolved) {
+              resolved = true;
+              stream.destroy();
+              ssh.end();
+              reject(new Error("Timeout ao conectar ao AMI via túnel SSH"));
+            }
+          }, 10000);
+
+          stream.on("data", (data: Buffer) => {
+            if (!resolved) {
+              const greeting = data.toString();
+              if (greeting.includes("Asterisk Call Manager")) {
+                resolved = true;
+                clearTimeout(timeout);
+                resolve({ socket: stream as any, sshClient: ssh });
+              }
+            }
+          });
+
+          stream.on("close", () => {
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(timeout);
+              ssh.end();
+              reject(new Error("Stream SSH fechado inesperadamente"));
+            }
+          });
+
+          stream.on("error", (err: Error) => {
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(timeout);
+              ssh.end();
+              reject(new Error(`Erro no stream SSH: ${err.message}`));
+            }
+          });
+        });
+      });
+
+      ssh.on("error", (err) => {
+        if (!resolved) {
+          resolved = true;
+          reject(new Error(`Erro de conexão SSH: ${err.message}`));
+        }
+      });
+
+      ssh.connect(sshConnectConfig);
+    });
+  }
+
+  private connect(): Promise<{ socket: net.Socket | any; sshClient?: SSHClient }> {
+    if (this.sshConfig?.enabled) {
+      return this.connectViaSSH();
+    }
+
     return new Promise((resolve, reject) => {
       const socket = new net.Socket();
       socket.setTimeout(8000);
@@ -78,7 +173,7 @@ export class AsteriskAMI {
           const greeting = data.toString();
           if (greeting.includes("Asterisk Call Manager")) {
             welcomed = true;
-            resolve(socket);
+            resolve({ socket });
           }
         }
       });
@@ -92,7 +187,7 @@ export class AsteriskAMI {
     collectEvents = false,
     eventEndMarker?: string
   ): Promise<{ response: AMIResponse; events: AMIResponse[] }> {
-    const socket = await this.connect();
+    const { socket, sshClient } = await this.connect();
     const actionId = `admin-voip-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     action["ActionID"] = actionId;
 
@@ -111,6 +206,7 @@ export class AsteriskAMI {
         } catch {}
         setTimeout(() => {
           try { socket.destroy(); } catch {}
+          try { sshClient?.end(); } catch {}
         }, 200);
       };
 
@@ -123,7 +219,7 @@ export class AsteriskAMI {
         }
       }, 10000);
 
-      socket.on("data", (data) => {
+      socket.on("data", (data: Buffer) => {
         buffer += data.toString();
 
         while (buffer.includes("\r\n\r\n")) {
@@ -196,18 +292,20 @@ export class AsteriskAMI {
     return Object.keys(obj).length > 0 ? obj : null;
   }
 
-  async testConnection(): Promise<{ success: boolean; message: string; version?: string }> {
+  async testConnection(): Promise<{ success: boolean; message: string; version?: string; connectionType?: string }> {
     try {
-      const socket = await this.connect();
+      const { socket, sshClient } = await this.connect();
+      const connType = sshClient ? "SSH Tunnel" : "Direto (TCP)";
 
       return new Promise((resolve) => {
         let buffer = "";
         const timeout = setTimeout(() => {
-          socket.destroy();
-          resolve({ success: false, message: "Timeout no login AMI" });
+          try { socket.destroy(); } catch {}
+          try { sshClient?.end(); } catch {}
+          resolve({ success: false, message: "Timeout no login AMI", connectionType: connType });
         }, 5000);
 
-        socket.on("data", (data) => {
+        socket.on("data", (data: Buffer) => {
           buffer += data.toString();
           if (buffer.includes("\r\n\r\n")) {
             const parsed = this.parseBlock(buffer.split("\r\n\r\n")[0]);
@@ -215,16 +313,22 @@ export class AsteriskAMI {
               clearTimeout(timeout);
               if (parsed.response === "Success") {
                 this.sendAction(socket, { Action: "Logoff" });
-                setTimeout(() => socket.destroy(), 200);
+                setTimeout(() => {
+                  try { socket.destroy(); } catch {}
+                  try { sshClient?.end(); } catch {}
+                }, 200);
                 resolve({
                   success: true,
                   message: parsed.message || "Conectado com sucesso",
+                  connectionType: connType,
                 });
               } else {
-                socket.destroy();
+                try { socket.destroy(); } catch {}
+                try { sshClient?.end(); } catch {}
                 resolve({
                   success: false,
                   message: parsed.message || "Falha na autenticação AMI",
+                  connectionType: connType,
                 });
               }
             }
@@ -798,6 +902,6 @@ export class AsteriskAMI {
   }
 }
 
-export function createAMIClient(host: string, port: number, username: string, password: string): AsteriskAMI {
-  return new AsteriskAMI(host, port, username, password);
+export function createAMIClient(host: string, port: number, username: string, password: string, sshConfig?: SSHConfig): AsteriskAMI {
+  return new AsteriskAMI(host, port, username, password, sshConfig);
 }
