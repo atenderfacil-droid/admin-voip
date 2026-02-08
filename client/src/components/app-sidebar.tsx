@@ -18,6 +18,10 @@ import {
   Shield,
   ShieldCheck,
   FileAudio,
+  Music,
+  BookUser,
+  Activity,
+  Database,
 } from "lucide-react";
 import {
   Sidebar,
@@ -47,8 +51,10 @@ const telephonyNav = [
   { title: "Troncos SIP", url: "/sip-trunks", icon: Globe },
   { title: "IVR / URA", url: "/ivr", icon: AudioLines },
   { title: "Filas", url: "/queues", icon: Users },
+  { title: "Music on Hold", url: "/music-on-hold", icon: Music },
   { title: "DID / DDR", url: "/dids", icon: Hash },
   { title: "CallerID / Prefixos", url: "/caller-id-rules", icon: Shield },
+  { title: "Agenda", url: "/phonebook", icon: BookUser },
 ];
 
 const systemNav = [
@@ -58,6 +64,8 @@ const systemNav = [
   { title: "Relatórios", url: "/reports", icon: BarChart3 },
   { title: "Integrações", url: "/integrations", icon: Plug },
   { title: "Usuários", url: "/users", icon: Users },
+  { title: "Log de Atividades", url: "/activity-log", icon: Activity },
+  { title: "Backup", url: "/backups", icon: Database },
   { title: "Configurações", url: "/settings", icon: Settings },
 ];
 

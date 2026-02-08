@@ -14,6 +14,7 @@ import {
   insertUserSchema,
   insertDidSchema,
   insertCallerIdRuleSchema,
+  insertContactSchema,
   type User,
   type Server as ServerType,
 } from "@shared/schema";
@@ -1605,6 +1606,265 @@ export async function registerRoutes(
       dailyCount,
     });
   });
+
+  // === CONTACTS CRUD ===
+  app.get("/api/contacts", requireAuth, async (req, res) => {
+    const companyId = getCompanyFilter(req);
+    const result = await storage.getContacts(companyId);
+    res.json(result);
+  });
+
+  app.post("/api/contacts", requireAuth, async (req, res) => {
+    const parsed = insertContactSchema.safeParse({
+      ...req.body,
+      companyId: enforceCompanyId(req, req.body.companyId),
+    });
+    if (!parsed.success) return res.status(400).json({ message: "Dados inválidos", errors: parsed.error.flatten() });
+    const contact = await storage.createContact(parsed.data);
+    await logActivity(req, "create", "contact", contact.id, `Contato criado: ${contact.name}`);
+    res.status(201).json(contact);
+  });
+
+  app.put("/api/contacts/:id", requireAuth, async (req, res) => {
+    const updated = await storage.updateContact(req.params.id, {
+      ...req.body,
+      companyId: enforceCompanyId(req, req.body.companyId),
+    });
+    if (!updated) return res.status(404).json({ message: "Contato não encontrado" });
+    await logActivity(req, "update", "contact", updated.id, `Contato atualizado: ${updated.name}`);
+    res.json(updated);
+  });
+
+  app.delete("/api/contacts/:id", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    const contact = await storage.getContact(req.params.id);
+    if (contact) await logActivity(req, "delete", "contact", req.params.id, `Contato excluído: ${contact.name}`);
+    await storage.deleteContact(req.params.id);
+    res.json({ success: true });
+  });
+
+  // === ACTIVITY LOGS ===
+  app.get("/api/activity-logs", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    const companyId = getCompanyFilter(req);
+    const userId = req.query.userId as string | undefined;
+    const resource = req.query.resource as string | undefined;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = (page - 1) * limit;
+
+    const result = await storage.getActivityLogs({ companyId, userId, resource, limit, offset });
+    res.json({ ...result, page, limit, totalPages: Math.ceil(result.total / limit) });
+  });
+
+  // === MUSIC ON HOLD: List MoH files via SSH ===
+  app.get("/api/servers/:id/moh", requireAuth, async (req, res) => {
+    try {
+      const { client } = await getSSHClient(req.params.id, req);
+      try {
+        const mohPaths = [
+          "/var/lib/asterisk/moh",
+          "/usr/share/asterisk/moh",
+          "/var/lib/asterisk/sounds/moh",
+        ];
+        const findCmd = `for dir in ${mohPaths.join(" ")}; do [ -d "$dir" ] && find "$dir" -type f \\( -name "*.wav" -o -name "*.mp3" -o -name "*.gsm" -o -name "*.ulaw" -o -name "*.alaw" \\) -printf '%T@ %s %p\\n' 2>/dev/null; done | sort -rn`;
+        const result = await execSSHCommand(client, findCmd);
+        const lines = result.stdout.trim().split("\n").filter(l => l.trim());
+
+        const classesCmd = `grep -r "^\\[" /etc/asterisk/musiconhold.conf 2>/dev/null || echo ''`;
+        const classesResult = await execSSHCommand(client, classesCmd);
+        const classNames = classesResult.stdout.match(/\[([^\]]+)\]/g)?.map(c => c.replace(/[\[\]]/g, "")) || ["default"];
+
+        const files = lines.map((line) => {
+          const parts = line.split(" ");
+          const timestamp = parseFloat(parts[0]) * 1000;
+          const size = parseInt(parts[1]);
+          const filePath = parts.slice(2).join(" ");
+          const fileName = filePath.split("/").pop() || "";
+          const parentDir = filePath.split("/").slice(-2, -1)[0] || "";
+          return { fileName, filePath, size, date: new Date(timestamp).toISOString(), mohClass: parentDir, extension: fileName.split(".").pop()?.toLowerCase() || "" };
+        }).filter(r => r.fileName);
+
+        res.json({ files, classes: classNames });
+      } finally {
+        client.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === MUSIC ON HOLD: Delete MoH file ===
+  app.delete("/api/servers/:id/moh", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    try {
+      const { client } = await getSSHClient(req.params.id, req);
+      try {
+        const filePath = req.query.file as string;
+        if (!filePath) return res.status(400).json({ message: "Parâmetro 'file' é obrigatório" });
+        const sanitized = filePath.replace(/[;&|`$]/g, "");
+        await execSSHCommand(client, `rm -f "${sanitized}"`);
+        await execSSHCommand(client, "asterisk -rx 'moh reload' 2>/dev/null || true");
+        res.json({ success: true, message: "Arquivo MoH excluído" });
+      } finally {
+        client.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === MUSIC ON HOLD: Download/stream MoH file ===
+  app.get("/api/servers/:id/moh/download", requireAuth, async (req, res) => {
+    try {
+      const { client } = await getSSHClient(req.params.id, req);
+      const filePath = req.query.file as string;
+      if (!filePath) { client.end(); return res.status(400).json({ message: "Parâmetro 'file' é obrigatório" }); }
+      const sanitized = filePath.replace(/[;&|`$]/g, "");
+      const fileName = sanitized.split("/").pop() || "moh";
+      const ext = fileName.split(".").pop()?.toLowerCase() || "wav";
+      const ct: Record<string, string> = { wav: "audio/wav", mp3: "audio/mpeg", gsm: "audio/x-gsm", ulaw: "audio/basic", alaw: "audio/basic" };
+      res.setHeader("Content-Type", ct[ext] || "application/octet-stream");
+      res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
+      client.exec(`cat "${sanitized}"`, (err, stream) => {
+        if (err) { client.end(); return res.status(500).json({ message: "Erro ao ler arquivo" }); }
+        stream.pipe(res);
+        stream.on("close", () => client.end());
+        stream.on("error", () => { client.end(); res.end(); });
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === BACKUP: Create backup of Asterisk configs via SSH ===
+  app.post("/api/servers/:id/backup", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    try {
+      const { client, server } = await getSSHClient(req.params.id, req);
+      try {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const backupDir = "/var/backups/asterisk";
+        const backupFile = `asterisk-backup-${timestamp}.tar.gz`;
+
+        await execSSHCommand(client, `mkdir -p ${backupDir}`);
+        const result = await execSSHCommand(client, `tar czf ${backupDir}/${backupFile} /etc/asterisk/ /var/spool/asterisk/voicemail/ 2>/dev/null; echo $?`);
+
+        await logActivity(req, "backup", "server", server.id, `Backup criado: ${backupFile}`);
+        res.json({ success: true, message: `Backup criado: ${backupFile}`, fileName: backupFile, path: `${backupDir}/${backupFile}` });
+      } finally {
+        client.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === BACKUP: List backups via SSH ===
+  app.get("/api/servers/:id/backups", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    try {
+      const { client } = await getSSHClient(req.params.id, req);
+      try {
+        const result = await execSSHCommand(client, `ls -la /var/backups/asterisk/*.tar.gz 2>/dev/null | awk '{print $5, $6, $7, $8, $9}' || echo ''`);
+        const lines = result.stdout.trim().split("\n").filter(l => l.trim());
+        const backups = lines.map((line) => {
+          const parts = line.trim().split(/\s+/);
+          const size = parseInt(parts[0]) || 0;
+          const filePath = parts[parts.length - 1] || "";
+          const fileName = filePath.split("/").pop() || "";
+          return { fileName, filePath, size, date: parts.slice(1, -1).join(" ") };
+        }).filter(b => b.fileName);
+        res.json({ backups });
+      } finally {
+        client.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === BACKUP: Download backup file via SSH ===
+  app.get("/api/servers/:id/backups/download", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    try {
+      const { client } = await getSSHClient(req.params.id, req);
+      const filePath = req.query.file as string;
+      if (!filePath) { client.end(); return res.status(400).json({ message: "Parâmetro 'file' é obrigatório" }); }
+      const sanitized = filePath.replace(/[;&|`$]/g, "");
+      const fileName = sanitized.split("/").pop() || "backup.tar.gz";
+      res.setHeader("Content-Type", "application/gzip");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      client.exec(`cat "${sanitized}"`, (err, stream) => {
+        if (err) { client.end(); return res.status(500).json({ message: "Erro ao ler backup" }); }
+        stream.pipe(res);
+        stream.on("close", () => client.end());
+        stream.on("error", () => { client.end(); res.end(); });
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === BACKUP: Delete backup via SSH ===
+  app.delete("/api/servers/:id/backups", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    try {
+      const { client } = await getSSHClient(req.params.id, req);
+      try {
+        const filePath = req.query.file as string;
+        if (!filePath) return res.status(400).json({ message: "Parâmetro 'file' é obrigatório" });
+        const sanitized = filePath.replace(/[;&|`$]/g, "");
+        await execSSHCommand(client, `rm -f "${sanitized}"`);
+        res.json({ success: true, message: "Backup excluído" });
+      } finally {
+        client.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === BACKUP: Restore backup via SSH ===
+  app.post("/api/servers/:id/backups/restore", requireAuth, async (req, res) => {
+    if (!isSuperAdmin(req)) return res.status(403).json({ message: "Apenas super_admin pode restaurar backups" });
+    try {
+      const { client, server } = await getSSHClient(req.params.id, req);
+      try {
+        const { file } = req.body;
+        if (!file) return res.status(400).json({ message: "Parâmetro 'file' é obrigatório" });
+        const sanitized = file.replace(/[;&|`$]/g, "");
+
+        await execSSHCommand(client, `cp -a /etc/asterisk /etc/asterisk.pre-restore-$(date +%Y%m%d%H%M%S)`);
+        const result = await execSSHCommand(client, `tar xzf "${sanitized}" -C / 2>&1`);
+        await execSSHCommand(client, "asterisk -rx 'core reload' 2>/dev/null || true");
+
+        await logActivity(req, "restore", "server", server.id, `Backup restaurado: ${sanitized}`);
+        res.json({ success: result.code === 0, message: result.code === 0 ? "Backup restaurado com sucesso" : result.stderr || "Erro na restauração" });
+      } finally {
+        client.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === Activity log helper ===
+  async function logActivity(req: Request, action: string, resource: string, resourceId?: string, details?: string) {
+    try {
+      const user = getAuthUser(req);
+      await storage.createActivityLog({
+        userId: user.id,
+        userName: user.fullName || user.username,
+        action,
+        resource,
+        resourceId: resourceId || undefined,
+        details,
+        ipAddress: (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || undefined,
+        companyId: user.companyId || undefined,
+      });
+    } catch {}
+  }
 
   // === SSH helper to get SSH client from server ===
   async function getSSHClient(serverId: string, req: Request) {

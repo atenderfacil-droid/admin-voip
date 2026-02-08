@@ -25,7 +25,11 @@ import OnlineCalls from "@/pages/online-calls";
 import Dids from "@/pages/dids";
 import CallerIdRules from "@/pages/caller-id-rules";
 import Recordings from "@/pages/recordings";
+import MusicOnHold from "@/pages/music-on-hold";
 import Firewall from "@/pages/firewall";
+import Phonebook from "@/pages/phonebook";
+import ActivityLog from "@/pages/activity-log";
+import Backups from "@/pages/backups";
 import Landing from "@/pages/landing";
 import Login from "@/pages/login";
 import { Loader2 } from "lucide-react";
@@ -44,8 +48,12 @@ function ProtectedRouter() {
       <Route path="/dids" component={Dids} />
       <Route path="/caller-id-rules" component={CallerIdRules} />
       <Route path="/recordings" component={Recordings} />
+      <Route path="/music-on-hold" component={MusicOnHold} />
       <Route path="/firewall" component={Firewall} />
+      <Route path="/phonebook" component={Phonebook} />
+      <Route path="/backups" component={Backups} />
       <Route path="/call-logs" component={CallLogs} />
+      <Route path="/activity-log" component={ActivityLog} />
       <Route path="/reports" component={Reports} />
       <Route path="/integrations" component={Integrations} />
       <Route path="/settings" component={Settings} />

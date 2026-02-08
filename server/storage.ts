@@ -11,6 +11,8 @@ import {
   callLogs,
   dids,
   callerIdRules,
+  contacts,
+  activityLogs,
   type User,
   type InsertUser,
   type Company,
@@ -31,6 +33,10 @@ import {
   type InsertDid,
   type CallerIdRule,
   type InsertCallerIdRule,
+  type Contact,
+  type InsertContact,
+  type ActivityLog,
+  type InsertActivityLog,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -101,6 +107,21 @@ export interface IStorage {
   createCallerIdRule(rule: InsertCallerIdRule): Promise<CallerIdRule>;
   updateCallerIdRule(id: string, rule: Partial<InsertCallerIdRule>): Promise<CallerIdRule | undefined>;
   deleteCallerIdRule(id: string): Promise<void>;
+
+  getContacts(companyId?: string): Promise<Contact[]>;
+  getContact(id: string): Promise<Contact | undefined>;
+  createContact(contact: InsertContact): Promise<Contact>;
+  updateContact(id: string, contact: Partial<InsertContact>): Promise<Contact | undefined>;
+  deleteContact(id: string): Promise<void>;
+
+  getActivityLogs(filters: {
+    companyId?: string;
+    userId?: string;
+    resource?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ logs: ActivityLog[]; total: number }>;
+  createActivityLog(log: InsertActivityLog): Promise<ActivityLog>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -382,6 +403,59 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCallerIdRule(id: string): Promise<void> {
     await db.delete(callerIdRules).where(eq(callerIdRules.id, id));
+  }
+
+  async getContacts(companyId?: string): Promise<Contact[]> {
+    if (companyId) {
+      return db.select().from(contacts).where(eq(contacts.companyId, companyId));
+    }
+    return db.select().from(contacts);
+  }
+
+  async getContact(id: string): Promise<Contact | undefined> {
+    const [contact] = await db.select().from(contacts).where(eq(contacts.id, id));
+    return contact;
+  }
+
+  async createContact(contact: InsertContact): Promise<Contact> {
+    const [created] = await db.insert(contacts).values(contact).returning();
+    return created;
+  }
+
+  async updateContact(id: string, contact: Partial<InsertContact>): Promise<Contact | undefined> {
+    const [updated] = await db.update(contacts).set(contact).where(eq(contacts.id, id)).returning();
+    return updated;
+  }
+
+  async deleteContact(id: string): Promise<void> {
+    await db.delete(contacts).where(eq(contacts.id, id));
+  }
+
+  async getActivityLogs(filters: {
+    companyId?: string;
+    userId?: string;
+    resource?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ logs: ActivityLog[]; total: number }> {
+    const conditions = [];
+    if (filters.companyId) conditions.push(eq(activityLogs.companyId, filters.companyId));
+    if (filters.userId) conditions.push(eq(activityLogs.userId, filters.userId));
+    if (filters.resource) conditions.push(eq(activityLogs.resource, filters.resource));
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    const limit = filters.limit || 100;
+    const offset = filters.offset || 0;
+
+    const [totalResult] = await db.select({ count: sql<number>`count(*)::int` }).from(activityLogs).where(where);
+    const logs = await db.select().from(activityLogs).where(where).orderBy(desc(activityLogs.createdAt)).limit(limit).offset(offset);
+
+    return { logs, total: totalResult?.count || 0 };
+  }
+
+  async createActivityLog(log: InsertActivityLog): Promise<ActivityLog> {
+    const [created] = await db.insert(activityLogs).values(log).returning();
+    return created;
   }
 }
 

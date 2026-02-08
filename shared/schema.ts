@@ -203,6 +203,31 @@ export const callerIdRules = pgTable("caller_id_rules", {
   serverId: varchar("server_id"),
 });
 
+export const contacts = pgTable("contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  phone: text("phone").notNull(),
+  email: text("email"),
+  company: text("company"),
+  department: text("department"),
+  notes: text("notes"),
+  favorite: boolean("favorite").notNull().default(false),
+  companyId: varchar("company_id").notNull(),
+});
+
+export const activityLogs = pgTable("activity_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  userName: text("user_name").notNull(),
+  action: text("action").notNull(),
+  resource: text("resource").notNull(),
+  resourceId: varchar("resource_id"),
+  details: text("details"),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  companyId: varchar("company_id"),
+});
+
 export interface IvrOption {
   digit: string;
   action: string;
@@ -227,6 +252,8 @@ export const insertQueueSchema = createInsertSchema(queues).omit({ id: true });
 export const insertCallLogSchema = createInsertSchema(callLogs).omit({ id: true });
 export const insertDidSchema = createInsertSchema(dids).omit({ id: true });
 export const insertCallerIdRuleSchema = createInsertSchema(callerIdRules).omit({ id: true });
+export const insertContactSchema = createInsertSchema(contacts).omit({ id: true });
+export const insertActivityLogSchema = createInsertSchema(activityLogs).omit({ id: true, createdAt: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -248,3 +275,7 @@ export type InsertDid = z.infer<typeof insertDidSchema>;
 export type Did = typeof dids.$inferSelect;
 export type InsertCallerIdRule = z.infer<typeof insertCallerIdRuleSchema>;
 export type CallerIdRule = typeof callerIdRules.$inferSelect;
+export type InsertContact = z.infer<typeof insertContactSchema>;
+export type Contact = typeof contacts.$inferSelect;
+export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
+export type ActivityLog = typeof activityLogs.$inferSelect;
