@@ -495,7 +495,7 @@ export default function Extensions() {
           <Dialog open={fetchOpen} onOpenChange={(v) => { setFetchOpen(v); if (!v) { setServerExtensions([]); setSelectedForImport(new Set()); } }}>
             <DialogTrigger asChild>
               <Button variant="outline" data-testid="button-fetch-extensions">
-                <Download className="w-4 h-4 mr-2" /> Obter do Servidor
+                <Download className="w-4 h-4 mr-2" /> Atualizar
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
