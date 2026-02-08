@@ -22,6 +22,8 @@ import Settings from "@/pages/settings";
 import UsersPage from "@/pages/users";
 import Queues from "@/pages/queues";
 import OnlineCalls from "@/pages/online-calls";
+import Dids from "@/pages/dids";
+import CallerIdRules from "@/pages/caller-id-rules";
 import Landing from "@/pages/landing";
 import Login from "@/pages/login";
 import { Loader2 } from "lucide-react";
@@ -37,6 +39,8 @@ function ProtectedRouter() {
       <Route path="/ivr" component={IVR} />
       <Route path="/queues" component={Queues} />
       <Route path="/online-calls" component={OnlineCalls} />
+      <Route path="/dids" component={Dids} />
+      <Route path="/caller-id-rules" component={CallerIdRules} />
       <Route path="/call-logs" component={CallLogs} />
       <Route path="/reports" component={Reports} />
       <Route path="/integrations" component={Integrations} />

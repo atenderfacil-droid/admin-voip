@@ -14,6 +14,8 @@ import {
   Headphones,
   Users,
   LogOut,
+  Hash,
+  Shield,
 } from "lucide-react";
 import {
   Sidebar,
@@ -43,6 +45,8 @@ const telephonyNav = [
   { title: "Troncos SIP", url: "/sip-trunks", icon: Globe },
   { title: "IVR / URA", url: "/ivr", icon: AudioLines },
   { title: "Filas", url: "/queues", icon: Users },
+  { title: "DID / DDR", url: "/dids", icon: Hash },
+  { title: "CallerID / Prefixos", url: "/caller-id-rules", icon: Shield },
 ];
 
 const systemNav = [
