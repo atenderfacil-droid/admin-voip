@@ -48,6 +48,7 @@ export interface IStorage {
   deleteServer(id: string): Promise<void>;
 
   getExtensions(companyId?: string): Promise<Extension[]>;
+  getExtensionsByServer(serverId: string): Promise<Extension[]>;
   getExtension(id: string): Promise<Extension | undefined>;
   createExtension(extension: InsertExtension): Promise<Extension>;
   updateExtension(id: string, extension: Partial<InsertExtension>): Promise<Extension | undefined>;
@@ -164,6 +165,10 @@ export class DatabaseStorage implements IStorage {
       return db.select().from(extensions).where(eq(extensions.companyId, companyId));
     }
     return db.select().from(extensions);
+  }
+
+  async getExtensionsByServer(serverId: string): Promise<Extension[]> {
+    return db.select().from(extensions).where(eq(extensions.serverId, serverId));
   }
 
   async getExtension(id: string): Promise<Extension | undefined> {

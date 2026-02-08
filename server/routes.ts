@@ -532,6 +532,136 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/servers/:id/ami/fetch-extensions", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    try {
+      const { ami, server } = await getAMIClient(req.params.id as string, req);
+      const [sipPeers, pjsipEndpoints] = await Promise.all([
+        ami.getSIPPeers().catch(() => []),
+        ami.getPJSIPEndpoints().catch(() => []),
+      ]);
+
+      const existingExtensions = await storage.getExtensionsByServer(req.params.id as string);
+      const existingNumbers = new Set(existingExtensions.map((e) => e.number));
+
+      const serverExtensions: Array<{
+        number: string;
+        name: string;
+        protocol: string;
+        status: string;
+        ipAddress: string;
+        exists: boolean;
+        existingId?: string;
+      }> = [];
+
+      for (const peer of sipPeers) {
+        const number = peer.objectname;
+        if (!number || number === "anonymous") continue;
+        const existing = existingExtensions.find((e) => e.number === number);
+        serverExtensions.push({
+          number,
+          name: peer.description || number,
+          protocol: "SIP",
+          status: peer.status?.toLowerCase().includes("ok") ? "active" : "inactive",
+          ipAddress: peer.ipaddress || "-",
+          exists: existingNumbers.has(number),
+          existingId: existing?.id,
+        });
+      }
+
+      for (const ep of pjsipEndpoints) {
+        const number = ep.objectname;
+        if (!number || number === "anonymous") continue;
+        const existing = existingExtensions.find((e) => e.number === number);
+        serverExtensions.push({
+          number,
+          name: number,
+          protocol: "PJSIP",
+          status: ep.devicestate?.toLowerCase().includes("not") ? "inactive" : "active",
+          ipAddress: "-",
+          exists: existingNumbers.has(number),
+          existingId: existing?.id,
+        });
+      }
+
+      res.json({
+        extensions: serverExtensions,
+        serverId: req.params.id,
+        serverName: server.name,
+        companyId: server.companyId,
+      });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ami/import-extensions", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) {
+      return res.status(403).json({ message: "Permissão insuficiente" });
+    }
+    try {
+      const server = await storage.getServer(req.params.id as string);
+      if (!server) return res.status(404).json({ message: "Servidor não encontrado" });
+      if (!canAccessCompany(req, server.companyId)) {
+        return res.status(403).json({ message: "Acesso negado" });
+      }
+
+      const { extensions: toImport } = req.body;
+      if (!Array.isArray(toImport) || toImport.length === 0) {
+        return res.status(400).json({ message: "Nenhum ramal selecionado para importar" });
+      }
+
+      const existingExtensions = await storage.getExtensionsByServer(req.params.id as string);
+      const existingNumbers = new Set(existingExtensions.map((e) => e.number));
+
+      const imported: any[] = [];
+      const skipped: string[] = [];
+
+      for (const ext of toImport) {
+        if (existingNumbers.has(ext.number)) {
+          skipped.push(ext.number);
+          continue;
+        }
+        const created = await storage.createExtension({
+          number: ext.number,
+          name: ext.name || ext.number,
+          secret: ext.secret || Math.random().toString(36).slice(2, 10),
+          context: ext.context || "internal",
+          protocol: ext.protocol || "SIP",
+          callerId: `"${ext.name || ext.number}" <${ext.number}>`,
+          mailbox: `${ext.number}@default`,
+          voicemailEnabled: false,
+          callRecording: false,
+          callForwardNumber: "",
+          companyId: server.companyId!,
+          serverId: req.params.id as string,
+        });
+        imported.push(created);
+      }
+
+      res.json({
+        imported: imported.length,
+        skipped: skipped.length,
+        skippedNumbers: skipped,
+        total: toImport.length,
+      });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/servers/:id/extensions/check-duplicate/:number", requireAuth, async (req, res) => {
+    try {
+      const existingExtensions = await storage.getExtensionsByServer(req.params.id as string);
+      const exists = existingExtensions.some((e) => e.number === req.params.number);
+      res.json({ exists, number: req.params.number });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   // Extensions (multi-tenant)
   app.get("/api/extensions", async (req, res) => {
     const companyId = getCompanyFilter(req);
@@ -560,6 +690,10 @@ export async function registerRoutes(
     if (!companyId) return res.status(400).json({ message: "Empresa obrigatória" });
     const data = { ...result.data, companyId };
     try {
+      const existingInServer = await storage.getExtensionsByServer(data.serverId);
+      if (existingInServer.some((e) => e.number === data.number)) {
+        return res.status(409).json({ message: `Ramal ${data.number} já existe neste servidor` });
+      }
       const ext = await storage.createExtension(data);
       res.status(201).json(ext);
     } catch (error: any) {
