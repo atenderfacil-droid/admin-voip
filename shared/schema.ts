@@ -270,6 +270,30 @@ export interface QueueMember {
   paused: boolean;
 }
 
+export const platformSettings = pgTable("platform_settings", {
+  id: integer("id").primaryKey().default(1),
+  platformName: text("platform_name").notNull().default("Admin VOIP"),
+  domain: text("domain").default(""),
+  defaultSipPort: integer("default_sip_port").notNull().default(5060),
+  rtpStart: integer("rtp_start").notNull().default(10000),
+  rtpEnd: integer("rtp_end").notNull().default(20000),
+  defaultCodec: text("default_codec").notNull().default("G.711"),
+  defaultDtmf: text("default_dtmf").notNull().default("rfc2833"),
+  defaultRecording: boolean("default_recording").notNull().default(false),
+  natEnabled: boolean("nat_enabled").notNull().default(true),
+  tlsSrtp: boolean("tls_srtp").notNull().default(false),
+  blockAnonymousCalls: boolean("block_anonymous_calls").notNull().default(true),
+  alwaysAuthReject: boolean("always_auth_reject").notNull().default(true),
+  fail2banEnabled: boolean("fail2ban_enabled").notNull().default(true),
+  allowedIps: text("allowed_ips").default(""),
+  emailServerOffline: boolean("email_server_offline").notNull().default(true),
+  emailTrunkDisconnected: boolean("email_trunk_disconnected").notNull().default(true),
+  emailHighCpu: boolean("email_high_cpu").notNull().default(true),
+  emailMissedCalls: boolean("email_missed_calls").notNull().default(false),
+  autoBackup: boolean("auto_backup").notNull().default(true),
+  logRetentionDays: integer("log_retention_days").notNull().default(90),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertCompanySchema = createInsertSchema(companies).omit({ id: true });
 export const insertServerSchema = createInsertSchema(servers).omit({ id: true });
@@ -313,3 +337,6 @@ export type InsertContact = z.infer<typeof insertContactSchema>;
 export type Contact = typeof contacts.$inferSelect;
 export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
 export type ActivityLog = typeof activityLogs.$inferSelect;
+export const insertPlatformSettingsSchema = createInsertSchema(platformSettings).omit({ id: true });
+export type InsertPlatformSettings = z.infer<typeof insertPlatformSettingsSchema>;
+export type PlatformSettings = typeof platformSettings.$inferSelect;

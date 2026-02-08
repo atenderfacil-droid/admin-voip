@@ -2082,6 +2082,29 @@ export async function registerRoutes(
     }
   });
 
+  // === Platform Settings ===
+  app.get("/api/platform-settings", async (req, res) => {
+    if (!req.session?.userId) return res.status(401).json({ error: "Unauthorized" });
+    const user = await storage.getUser(req.session.userId);
+    if (!user || !["super_admin", "admin"].includes(user.role)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const settings = await storage.getPlatformSettings();
+    res.json(settings);
+  });
+
+  app.put("/api/platform-settings", async (req, res) => {
+    if (!req.session?.userId) return res.status(401).json({ error: "Unauthorized" });
+    const user = await storage.getUser(req.session.userId);
+    if (!user || !["super_admin", "admin"].includes(user.role)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    (req as any).user = user;
+    const settings = await storage.updatePlatformSettings(req.body);
+    await logActivity(req, "update", "platform_settings", "1", "Configurações da plataforma atualizadas");
+    res.json(settings);
+  });
+
   // === Activity log helper ===
   async function logActivity(req: Request, action: string, resource: string, resourceId?: string, details?: string) {
     try {

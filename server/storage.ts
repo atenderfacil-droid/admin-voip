@@ -15,6 +15,7 @@ import {
   speedDials,
   contacts,
   activityLogs,
+  platformSettings,
   type User,
   type InsertUser,
   type Company,
@@ -43,6 +44,8 @@ import {
   type InsertContact,
   type ActivityLog,
   type InsertActivityLog,
+  type PlatformSettings,
+  type InsertPlatformSettings,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -140,6 +143,9 @@ export interface IStorage {
     offset?: number;
   }): Promise<{ logs: ActivityLog[]; total: number }>;
   createActivityLog(log: InsertActivityLog): Promise<ActivityLog>;
+
+  getPlatformSettings(): Promise<PlatformSettings>;
+  updatePlatformSettings(settings: Partial<InsertPlatformSettings>): Promise<PlatformSettings>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -526,6 +532,21 @@ export class DatabaseStorage implements IStorage {
   async createActivityLog(log: InsertActivityLog): Promise<ActivityLog> {
     const [created] = await db.insert(activityLogs).values(log).returning();
     return created;
+  }
+
+  async getPlatformSettings(): Promise<PlatformSettings> {
+    const [settings] = await db.select().from(platformSettings);
+    if (!settings) {
+      const [created] = await db.insert(platformSettings).values({}).returning();
+      return created;
+    }
+    return settings;
+  }
+
+  async updatePlatformSettings(settings: Partial<InsertPlatformSettings>): Promise<PlatformSettings> {
+    const existing = await this.getPlatformSettings();
+    const [updated] = await db.update(platformSettings).set(settings).where(eq(platformSettings.id, existing.id)).returning();
+    return updated;
   }
 }
 
