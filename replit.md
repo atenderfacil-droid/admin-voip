@@ -34,12 +34,19 @@ client/src/
     sip-trunks.tsx     - SIP trunk configuration (CRUD)
     ivr.tsx            - IVR/URA menu management (CRUD)
     queues.tsx         - Queue management (CRUD + real-time AMI status)
+    conference-rooms.tsx - Salas de conferência ConfBridge (CRUD + AMI kick/mute/lock)
     call-logs.tsx      - CDR (Call Detail Records) viewer with real-time AMI capture, filters and pagination
     dids.tsx           - DID/DDR management (CRUD) with business hours routing
     caller-id-rules.tsx - CallerID rules management (CRUD) with pattern matching
+    speed-dials.tsx    - Speed Dial / BLF management (CRUD)
+    voicemail.tsx      - Voicemail management (AMI users + SSH messages browse/play/delete)
     reports.tsx        - Call reports with charts (hourly/disposition/daily) and CSV/PDF export
     recordings.tsx     - Call recordings browser via SSH (list/play/download/delete)
+    music-on-hold.tsx  - Music on Hold file management via SSH (list/play/download/delete)
     firewall.tsx       - Fail2ban + IPTables security visualization via SSH
+    phonebook.tsx      - Agenda de contatos (CRUD com favoritos)
+    activity-log.tsx   - Log de atividades/auditoria do sistema
+    backups.tsx        - Backup & Restauração de configurações Asterisk via SSH
     integrations.tsx   - Device compatibility, SIP providers, API docs
     settings.tsx       - Platform configuration settings
     users.tsx          - Gestão de usuários do sistema (CRUD)
@@ -67,6 +74,7 @@ shared/
   - Test connection, CoreStatus, CoreSettings, SIP/PJSIP peers
   - Active channels with hangup capability (individual + mass hangup with regex)
   - Queue status with member management (add/remove/pause)
+  - ConfBridge room listing, kick, mute/unmute, lock/unlock
   - Voicemail users list, SIP registrations
   - Reload Asterisk, CLI command execution
   - Originate calls, redirect channels, monitoring
@@ -80,8 +88,10 @@ shared/
 - SIP extension management with voicemail and call recording
 - SIP trunk configuration for VoIP providers
 - IVR/URA menu builder with multi-level options
+- **Conference Rooms (ConfBridge)**: Room management with PIN/Admin PIN, recording, MoH, announce join/leave, wait for leader, quiet mode + live AMI actions (kick/mute/lock)
 - **DID/DDR Management**: Inbound number routing with business hours and after-hours destinations
 - **CallerID Rules**: Pattern matching and manipulation (set/prefix/suffix/remove_prefix/block)
+- **Speed Dial / BLF**: Fast dial key management with BLF monitoring support
 - **Queue management** (CRUD + real-time AMI queue status)
 - **CDR Integration**: Real-time call detail records captured via AMI Event: Cdr
   - Persistent CDR listeners auto-start at boot for all AMI-enabled servers
@@ -94,11 +104,21 @@ shared/
   - Scans multiple Asterisk recording directories
   - Inline HTML5 audio playback
   - Date and filename search filters with pagination
+- **Voicemail Management**: AMI voicemail users list + SSH-based message browsing
+  - Two tabs: Caixas Postais (mailboxes) and Mensagens (messages)
+  - Inline audio playback, download, delete
+- **Music on Hold**: SSH-based MoH file management
+  - List/play/download/delete MoH files
+  - MoH class detection and display
 - **Firewall/Security**: Fail2ban and IPTables visualization via SSH
   - Security overview: Fail2ban version, rules count, failed logins, open SIP ports
   - Fail2ban jail status with banned IPs and unban capability
   - IPTables chain listing with rules detail
   - Recent auth log viewer
+- **Phonebook/Contacts**: Contact management with favorite toggle, search filtering
+- **Activity Log**: User action audit trail with resource filtering, pagination, colored action badges
+- **Backup & Restore**: Asterisk config backup via SSH with create/list/download/restore/delete
+  - Restore requires super_admin with double confirmation
 - Integration documentation (softphones, IP phones, SIP providers, API)
 - Dark/light theme support
 - Responsive design
@@ -110,7 +130,7 @@ shared/
 - **viewer**: Apenas visualização dentro da própria empresa
 
 ## Database Models
-- users, companies, servers (with AMI + SSH fields), extensions, sipTrunks, ivrMenus, queues, callLogs, dids, callerIdRules
+- users, companies, servers (with AMI + SSH fields), extensions, sipTrunks, ivrMenus, queues, callLogs, dids, callerIdRules, conferenceRooms, speedDials, contacts, activityLogs
 
 ## API Endpoints
 All prefixed with `/api/`:
@@ -125,9 +145,13 @@ All prefixed with `/api/`:
 - `/sip-trunks` - CRUD
 - `/ivr-menus` - CRUD
 - `/queues` - CRUD
+- `/conference-rooms` - CRUD
+- `/speed-dials` - CRUD
+- `/contacts` - CRUD
 - `/dids` - CRUD
 - `/caller-id-rules` - CRUD
 - `/call-logs` - GET only
+- `/activity-logs` - GET with filters (admin only)
 - `/reports/calls-summary` - GET call summary data for reports
 - `/servers/:id/ami/test` - POST test AMI connection
 - `/servers/:id/ami/status` - GET full AMI status
@@ -139,6 +163,11 @@ All prefixed with `/api/`:
 - `/servers/:id/ami/queues` - GET queue status from Asterisk
 - `/servers/:id/ami/queue-summary` - GET queue summary
 - `/servers/:id/ami/voicemail` - GET voicemail users
+- `/servers/:id/ami/voicemail-list` - GET voicemail users via AMI
+- `/servers/:id/ami/confbridge-list` - GET ConfBridge room list
+- `/servers/:id/ami/confbridge-kick` - POST kick participant
+- `/servers/:id/ami/confbridge-mute` - POST mute/unmute participant
+- `/servers/:id/ami/confbridge-lock` - POST lock/unlock conference
 - `/servers/:id/ami/reload` - POST reload Asterisk
 - `/servers/:id/ami/command` - POST execute CLI command
 - `/servers/:id/ami/originate` - POST originate call
@@ -154,9 +183,16 @@ All prefixed with `/api/`:
 - `/servers/:id/ami/monitor` - POST start monitoring
 - `/servers/:id/ami/pjsip-endpoint/:endpoint` - GET PJSIP endpoint details
 - `/servers/:id/ami/pjsip-endpoints` - GET all PJSIP endpoints
-- `/servers/:id/recordings` - GET list recordings via SSH
+- `/servers/:id/recordings` - GET list / DELETE remove recordings via SSH
 - `/servers/:id/recordings/download` - GET stream/download recording file via SSH
-- `/servers/:id/recordings` - DELETE remove recording file via SSH (admin only)
+- `/servers/:id/voicemail-messages` - GET list / DELETE voicemail messages via SSH
+- `/servers/:id/voicemail-messages/download` - GET stream voicemail audio
+- `/servers/:id/moh` - GET list / DELETE MoH files via SSH
+- `/servers/:id/moh/download` - GET stream MoH audio file
+- `/servers/:id/backups` - GET list / DELETE backup files via SSH
+- `/servers/:id/backup` - POST create backup
+- `/servers/:id/backups/download` - GET download backup file
+- `/servers/:id/backups/restore` - POST restore backup (super_admin only)
 - `/servers/:id/firewall/fail2ban` - GET Fail2ban status via SSH
 - `/servers/:id/firewall/fail2ban/unban` - POST unban IP from Fail2ban jail
 - `/servers/:id/firewall/iptables` - GET IPTables rules via SSH
