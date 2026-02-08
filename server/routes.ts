@@ -149,6 +149,7 @@ export async function registerRoutes(
   app.use("/api/sip-trunks", requireAuth);
   app.use("/api/ivr-menus", requireAuth);
   app.use("/api/queues", requireAuth);
+  app.use("/api/online-calls", requireAuth);
   app.use("/api/call-logs", requireAuth);
   app.use("/api/users", requireAuth);
 
@@ -736,6 +737,64 @@ export async function registerRoutes(
       res.json({ exists, number: req.params.number });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/online-calls", async (req, res) => {
+    try {
+      const companyId = getCompanyFilter(req);
+      const allServers = await storage.getServers(companyId);
+      const amiServers = allServers.filter(
+        (s) => s.amiEnabled && s.amiUsername && s.amiPassword && s.status === "online"
+      );
+
+      const calls: Array<{
+        channel: string;
+        callerIdNum: string;
+        callerIdName: string;
+        extension: string;
+        context: string;
+        state: string;
+        application: string;
+        data: string;
+        duration: string;
+        bridgedChannel: string;
+        uniqueId: string;
+        serverId: string;
+        serverName: string;
+      }> = [];
+
+      await Promise.all(
+        amiServers.map(async (server) => {
+          try {
+            const { ami } = await getAMIClient(server.id, req);
+            const channels = await ami.getActiveChannels();
+            for (const ch of channels) {
+              calls.push({
+                channel: ch.channel,
+                callerIdNum: ch.calleridnum,
+                callerIdName: ch.calleridname,
+                extension: ch.extension,
+                context: ch.context,
+                state: ch.state,
+                application: ch.application,
+                data: ch.data,
+                duration: ch.duration,
+                bridgedChannel: ch.bridgedchannel,
+                uniqueId: ch.uniqueid,
+                serverId: server.id,
+                serverName: server.name,
+              });
+            }
+          } catch (err) {
+            // Server unreachable, skip
+          }
+        })
+      );
+
+      res.json(calls);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 

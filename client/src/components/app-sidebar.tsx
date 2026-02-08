@@ -4,6 +4,7 @@ import {
   Building2,
   Server,
   Phone,
+  PhoneCall,
   Globe,
   AudioLines,
   Plug,
@@ -37,6 +38,7 @@ const mainNav = [
 
 const telephonyNav = [
   { title: "Ramais", url: "/extensions", icon: Phone },
+  { title: "Chamadas Online", url: "/online-calls", icon: PhoneCall },
   { title: "Troncos SIP", url: "/sip-trunks", icon: Globe },
   { title: "IVR / URA", url: "/ivr", icon: AudioLines },
   { title: "Filas", url: "/queues", icon: Users },
