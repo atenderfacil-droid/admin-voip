@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -89,6 +89,21 @@ export default function Extensions() {
   const { data: servers } = useQuery<ServerType[]>({
     queryKey: ["/api/servers"],
   });
+
+  type LiveStatusMap = Record<string, { status: string; ipAddress: string; serverId: string; serverName: string }>;
+
+  const { data: liveStatus } = useQuery<LiveStatusMap>({
+    queryKey: ["/api/extensions/live-status"],
+    refetchInterval: 15000,
+  });
+
+  const getLiveStatus = useCallback((ext: Extension): string => {
+    if (!liveStatus || !ext.serverId) return ext.status;
+    const key = `${ext.serverId}:${ext.number}`;
+    const live = liveStatus[key];
+    if (live) return live.status;
+    return ext.status;
+  }, [liveStatus]);
 
   const amiServers = servers?.filter((s) => s.amiEnabled) || [];
 
@@ -652,7 +667,8 @@ export default function Extensions() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered?.map((ext) => {
-          const config = statusConfig[ext.status];
+          const realStatus = getLiveStatus(ext);
+          const config = statusConfig[realStatus] || statusConfig.inactive;
           return (
             <Card key={ext.id} className="hover-elevate" data-testid={`card-ext-${ext.id}`}>
               <CardContent className="p-5">
@@ -664,7 +680,7 @@ export default function Extensions() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="text-sm font-semibold">{ext.number}</h3>
-                        <div className={`w-2 h-2 rounded-full ${config.bg}`} />
+                        <div className={`w-2 h-2 rounded-full ${config.bg}`} data-testid={`status-dot-${ext.id}`} />
                       </div>
                       <span className="text-[11px] text-muted-foreground">{ext.name}</span>
                     </div>
@@ -692,7 +708,7 @@ export default function Extensions() {
                 </div>
 
                 <div className="flex items-center gap-2 mt-3 pt-3 border-t flex-wrap">
-                  <Badge variant={ext.status === "active" ? "default" : "secondary"} className="text-[10px]">
+                  <Badge variant={realStatus === "active" ? "default" : realStatus === "busy" ? "default" : "secondary"} className="text-[10px]" data-testid={`badge-status-${ext.id}`}>
                     {config.label}
                   </Badge>
                   {ext.voicemailEnabled && (

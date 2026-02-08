@@ -739,6 +739,78 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/extensions/live-status", async (req, res) => {
+    try {
+      const companyId = getCompanyFilter(req);
+      const allServers = await storage.getServers(companyId);
+      const amiServers = allServers.filter(
+        (s) => s.amiEnabled && s.amiUsername && s.amiPassword && s.status === "online"
+      );
+
+      const liveStatus: Record<string, { status: string; ipAddress: string; serverId: string; serverName: string }> = {};
+
+      await Promise.all(
+        amiServers.map(async (server) => {
+          try {
+            const { ami } = await getAMIClient(server.id, req);
+            const [sipPeers, pjsipEndpoints] = await Promise.all([
+              ami.getSIPPeers().catch(() => []),
+              ami.getPJSIPEndpoints().catch(() => []),
+            ]);
+
+            for (const peer of sipPeers) {
+              const name = peer.objectname;
+              if (!name) continue;
+              const statusLower = (peer.status || "").toLowerCase();
+              let normalizedStatus = "inactive";
+              if (statusLower.includes("ok") || statusLower.includes("reachable")) {
+                normalizedStatus = "active";
+              } else if (statusLower.includes("lagged")) {
+                normalizedStatus = "active";
+              } else if (statusLower.includes("unreachable") || statusLower.includes("unreach")) {
+                normalizedStatus = "unavailable";
+              } else if (statusLower.includes("unknown")) {
+                normalizedStatus = "inactive";
+              }
+              liveStatus[`${server.id}:${name}`] = {
+                status: normalizedStatus,
+                ipAddress: peer.ipaddress || "-",
+                serverId: server.id,
+                serverName: server.name,
+              };
+            }
+
+            for (const ep of pjsipEndpoints) {
+              const name = ep.objectname;
+              if (!name) continue;
+              const deviceState = (ep.devicestate || "").toLowerCase();
+              let normalizedStatus = "inactive";
+              if (deviceState.includes("ringing") || deviceState.includes("busy") || (deviceState.includes("inuse") && !deviceState.includes("not_inuse"))) {
+                normalizedStatus = "busy";
+              } else if (deviceState.includes("not_inuse") || deviceState === "idle") {
+                normalizedStatus = "active";
+              } else if (deviceState.includes("unavailable") || deviceState.includes("invalid")) {
+                normalizedStatus = "unavailable";
+              }
+              liveStatus[`${server.id}:${name}`] = {
+                status: normalizedStatus,
+                ipAddress: "-",
+                serverId: server.id,
+                serverName: server.name,
+              };
+            }
+          } catch (err) {
+            // Server unreachable, skip
+          }
+        })
+      );
+
+      res.json(liveStatus);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Extensions (multi-tenant)
   app.get("/api/extensions", async (req, res) => {
     const companyId = getCompanyFilter(req);
