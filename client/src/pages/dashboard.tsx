@@ -16,11 +16,13 @@ import {
   Podcast,
   BookUser,
   BarChart3,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { queryClient } from "@/lib/queryClient";
 import type { Server as ServerType, Company, Extension, SipTrunk, CallLog, Queue, ConferenceRoom, Contact } from "@shared/schema";
 
 function StatCard({
@@ -307,11 +309,38 @@ export default function Dashboard() {
   const favoriteContacts = contactsList?.filter((c) => c.favorite).length || 0;
   const answeredCalls = callsData?.logs?.filter((c) => c.disposition === "ANSWERED").length || 0;
 
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/servers"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/extensions"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/sip-trunks"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/call-logs"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/queues"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/conference-rooms"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/activity-logs"] });
+  };
+
   return (
     <div className="space-y-6" data-testid="page-dashboard">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Visão geral do sistema Admin VOIP</p>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Visão geral do sistema Admin VOIP</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground" data-testid="text-last-update">
+            Atualizado: {new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleRefresh}
+            data-testid="button-refresh-dashboard"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">

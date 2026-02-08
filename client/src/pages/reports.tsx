@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { jsPDF } from "jspdf";
 import {
   BarChart3,
   Download,
@@ -148,40 +149,86 @@ export default function Reports() {
 
   const exportPDF = () => {
     if (!summary) return;
-    const lines = [
-      "RELATÓRIO DE CHAMADAS",
-      `Gerado em: ${new Date().toLocaleString("pt-BR")}`,
-      "",
-      `Total de Chamadas: ${summary.total}`,
-      `Chamadas Atendidas: ${summary.answered} (${summary.answerRate.toFixed(1)}%)`,
-      `Duração Média: ${formatDuration(summary.avgDuration)}`,
-      `Tempo Médio de Conversa: ${formatDuration(summary.avgBillsec)}`,
-      "",
-      "RESULTADO DAS CHAMADAS:",
-      ...Object.entries(summary.dispositionCount).map(
-        ([k, v]) => `  ${dispositionLabels[k] || k}: ${v}`
-      ),
-      "",
-      "CHAMADAS POR HORA:",
-      ...Object.entries(summary.hourlyCount)
-        .sort(([a], [b]) => Number(a) - Number(b))
-        .map(([h, v]) => `  ${String(h).padStart(2, "0")}h: ${v}`),
-      "",
-      "CHAMADAS POR DIA:",
-      ...Object.entries(summary.dailyCount)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([d, v]) => `  ${d}: ${v}`),
-    ];
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 20;
 
-    const blob = new Blob([lines.join("\n")], {
-      type: "text/plain;charset=utf-8;",
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("RELATORIO DE CHAMADAS", pageWidth / 2, y, { align: "center" });
+    y += 8;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, pageWidth / 2, y, { align: "center" });
+    y += 12;
+
+    doc.setDrawColor(200);
+    doc.line(14, y, pageWidth - 14, y);
+    y += 10;
+
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Resumo Geral", 14, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Total de Chamadas: ${summary.total}`, 14, y); y += 6;
+    doc.text(`Chamadas Atendidas: ${summary.answered} (${summary.answerRate.toFixed(1)}%)`, 14, y); y += 6;
+    doc.text(`Duracao Media: ${formatDuration(summary.avgDuration)}`, 14, y); y += 6;
+    doc.text(`Tempo Medio de Conversa: ${formatDuration(summary.avgBillsec)}`, 14, y); y += 10;
+
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Resultado das Chamadas", 14, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    Object.entries(summary.dispositionCount).forEach(([k, v]) => {
+      doc.text(`${dispositionLabels[k] || k}: ${v}`, 20, y);
+      y += 6;
     });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `relatorio-chamadas-${new Date().toISOString().slice(0, 10)}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+    y += 4;
+
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Chamadas por Hora", 14, y);
+    y += 8;
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    const hourEntries = Object.entries(summary.hourlyCount).sort(([a], [b]) => Number(a) - Number(b));
+    const maxH = Math.max(...hourEntries.map(([, v]) => v), 1);
+    hourEntries.forEach(([h, v]) => {
+      if (y > 270) { doc.addPage(); y = 20; }
+      const barWidth = (v / maxH) * 100;
+      doc.text(`${String(h).padStart(2, "0")}h: ${v}`, 20, y);
+      doc.setFillColor(59, 130, 246);
+      doc.rect(55, y - 3, barWidth * 0.8, 4, "F");
+      y += 6;
+    });
+    y += 4;
+
+    if (y > 240) { doc.addPage(); y = 20; }
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Chamadas por Dia", 14, y);
+    y += 8;
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    Object.entries(summary.dailyCount)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([d, v]) => {
+        if (y > 270) { doc.addPage(); y = 20; }
+        doc.text(`${d}: ${v}`, 20, y);
+        y += 6;
+      });
+
+    y += 10;
+    if (y > 270) { doc.addPage(); y = 20; }
+    doc.setFontSize(8);
+    doc.setTextColor(128);
+    doc.text("Admin VOIP - Plataforma de Gerenciamento Asterisk", pageWidth / 2, y, { align: "center" });
+
+    doc.save(`relatorio-chamadas-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   const hourlyEntries = summary?.hourlyCount
