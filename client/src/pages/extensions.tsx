@@ -681,7 +681,7 @@ export default function Extensions() {
                     <FormField control={form.control} name="secret" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Senha SIP</FormLabel>
-                        <FormControl><Input {...field} type="password" data-testid="input-ext-secret" /></FormControl>
+                        <FormControl><Input {...field} type="text" data-testid="input-ext-secret" /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
