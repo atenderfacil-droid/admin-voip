@@ -28,7 +28,7 @@ export interface SetupResult {
   asteriskVersion?: string;
 }
 
-export function execSSHCommand(client: SSHClient, command: string): Promise<{ stdout: string; stderr: string; code: number }> {
+export function execSSHCommand(client: SSHClient, command: string, timeoutMs: number = 30000): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve, reject) => {
     client.exec(command, (err, stream) => {
       if (err) return reject(err);
@@ -51,7 +51,7 @@ export function execSSHCommand(client: SSHClient, command: string): Promise<{ st
       setTimeout(() => {
         try { stream.close(); } catch {}
         resolve({ stdout, stderr, code: -1 });
-      }, 30000);
+      }, timeoutMs);
     });
   });
 }

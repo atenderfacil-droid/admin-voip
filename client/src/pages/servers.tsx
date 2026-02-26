@@ -35,6 +35,9 @@ import {
   GitCompare,
   Download,
   ArrowLeftRight,
+  Upload,
+  RotateCw,
+  HardDriveDownload,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +46,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -1123,6 +1127,57 @@ export default function Servers() {
     },
   });
 
+  const updateSystemMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/servers/${id}/ssh/update-system`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: data.success ? "Sistema atualizado" : "Falha na atualização",
+        description: data.summary,
+        variant: data.success ? "default" : "destructive",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro ao atualizar sistema", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const restartAsteriskMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/servers/${id}/ssh/restart-asterisk`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: data.success ? "Serviço reiniciado" : "Falha ao reiniciar",
+        description: data.message,
+        variant: data.success ? "default" : "destructive",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro ao reiniciar Asterisk", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const syncServerMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/servers/${id}/sync-to-server`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: data.success ? "Sincronização concluída" : "Sincronização com erros",
+        description: data.message,
+        variant: data.success ? "default" : "destructive",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro na sincronização", description: err.message, variant: "destructive" });
+    },
+  });
+
   const onSubmit = (data: ServerForm) => {
     const submitData = { ...data };
     if (submitData.sshEnabled && submitData.sshHost) {
@@ -1621,6 +1676,57 @@ export default function Servers() {
                     <AMIConnectionStatus server={server} />
                   </div>
                 </div>
+
+                {server.sshEnabled && (
+                  <div className="flex items-center gap-2 pt-3 border-t flex-wrap">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm" disabled={updateSystemMutation.isPending} data-testid={`button-update-system-${server.id}`}>
+                          {updateSystemMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <HardDriveDownload className="w-3.5 h-3.5 mr-1.5" />}
+                          Atualizar Debian
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Atualizar Sistema Operacional</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Será executado apt-get update && apt-get upgrade no servidor {server.name}. Esta operação pode levar vários minutos. Deseja continuar?
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => updateSystemMutation.mutate(server.id)}>Confirmar Atualização</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm" disabled={restartAsteriskMutation.isPending} data-testid={`button-restart-asterisk-${server.id}`}>
+                          {restartAsteriskMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5 mr-1.5" />}
+                          Reiniciar Serviço
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Reiniciar Asterisk</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            O serviço Asterisk será reiniciado no servidor {server.name}. Todas as chamadas ativas serão desconectadas. Deseja continuar?
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => restartAsteriskMutation.mutate(server.id)}>Confirmar Reinício</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+
+                    <Button variant="outline" size="sm" disabled={syncServerMutation.isPending} onClick={() => syncServerMutation.mutate(server.id)} data-testid={`button-sync-server-${server.id}`}>
+                      {syncServerMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 mr-1.5" />}
+                      Sincronizar Serv
+                    </Button>
+                  </div>
+                )}
 
                 {isExpanded && <AMIStatusPanel server={server} />}
               </CardContent>

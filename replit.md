@@ -205,6 +205,9 @@ All prefixed with `/api/`:
 - `/servers/:id/firewall/fail2ban/unban` - POST unban IP from Fail2ban jail
 - `/servers/:id/firewall/iptables` - GET IPTables rules via SSH
 - `/servers/:id/firewall/overview` - GET security overview via SSH
+- `/servers/:id/ssh/update-system` - POST update Debian packages via SSH (apt-get update+upgrade)
+- `/servers/:id/ssh/restart-asterisk` - POST restart Asterisk service via SSH (systemctl restart)
+- `/servers/:id/sync-to-server` - POST sync all system configs to Asterisk server via SSH
 
 ## Running
 - `npm run dev` starts Express + Vite on port 5000

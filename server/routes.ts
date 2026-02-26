@@ -2126,6 +2126,86 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/servers/:id/ssh/update-system", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    try {
+      const server = await storage.getServer(req.params.id);
+      if (!server) return res.status(404).json({ message: "Servidor não encontrado" });
+      if (!canAccessCompany(req, server.companyId)) return res.status(403).json({ message: "Acesso negado" });
+      if (!server.sshEnabled) return res.status(400).json({ message: "SSH não habilitado neste servidor" });
+
+      const sshConfig: SSHConnectionConfig = {
+        host: server.sshHost || server.ipAddress,
+        port: server.sshPort || 22,
+        username: server.sshUsername || "root",
+        authMethod: (server.sshAuthMethod as "password" | "privatekey") || "password",
+        password: server.sshPassword || undefined,
+        privateKey: server.sshPrivateKey || undefined,
+      };
+
+      const client = await connectSSH(sshConfig);
+      try {
+        const updateResult = await execSSHCommand(client, 'DEBIAN_FRONTEND=noninteractive apt-get update -y 2>&1', 120000);
+        const upgradeResult = await execSSHCommand(client, 'DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" 2>&1', 300000);
+
+        const upgradeLines = upgradeResult.stdout.split('\n');
+        const upgradedLine = upgradeLines.find(l => l.includes('upgraded,'));
+        
+        res.json({
+          success: upgradeResult.code === 0,
+          output: upgradeResult.stdout.slice(-2000),
+          summary: upgradedLine || (upgradeResult.code === 0 ? "Sistema atualizado com sucesso" : "Falha na atualização"),
+          updateCode: updateResult.code,
+          upgradeCode: upgradeResult.code,
+        });
+      } finally {
+        client.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/servers/:id/ssh/restart-asterisk", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    try {
+      const server = await storage.getServer(req.params.id);
+      if (!server) return res.status(404).json({ message: "Servidor não encontrado" });
+      if (!canAccessCompany(req, server.companyId)) return res.status(403).json({ message: "Acesso negado" });
+      if (!server.sshEnabled) return res.status(400).json({ message: "SSH não habilitado neste servidor" });
+
+      const sshConfig: SSHConnectionConfig = {
+        host: server.sshHost || server.ipAddress,
+        port: server.sshPort || 22,
+        username: server.sshUsername || "root",
+        authMethod: (server.sshAuthMethod as "password" | "privatekey") || "password",
+        password: server.sshPassword || undefined,
+        privateKey: server.sshPrivateKey || undefined,
+      };
+
+      const client = await connectSSH(sshConfig);
+      try {
+        const restartResult = await execSSHCommand(client, 'systemctl restart asterisk 2>&1', 30000);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const statusResult = await execSSHCommand(client, 'systemctl is-active asterisk 2>&1', 10000);
+        const serviceStatus = statusResult.stdout.trim();
+
+        res.json({
+          success: serviceStatus === "active",
+          message: serviceStatus === "active"
+            ? "Serviço Asterisk reiniciado com sucesso"
+            : `Serviço Asterisk em estado: ${serviceStatus}`,
+          status: serviceStatus,
+          restartOutput: restartResult.stderr || restartResult.stdout,
+        });
+      } finally {
+        client.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // === VOICEMAIL: List via AMI ===
   app.get("/api/servers/:id/ami/voicemail-list", requireAuth, async (req, res) => {
     try {
