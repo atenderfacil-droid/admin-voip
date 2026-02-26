@@ -1103,9 +1103,9 @@ export async function registerRoutes(
               if (!name) return;
               const deviceState = (ep.devicestate || "").toLowerCase();
               let normalizedStatus = "inactive";
-              if (deviceState.includes("ringing") || deviceState.includes("busy") || (deviceState.includes("inuse") && !deviceState.includes("not_inuse"))) {
+              if (deviceState.includes("ringing") || deviceState.includes("busy") || (deviceState.includes("in use") && !deviceState.includes("not in use") && !deviceState.includes("not_inuse"))) {
                 normalizedStatus = "busy";
-              } else if (deviceState.includes("not_inuse") || deviceState === "idle") {
+              } else if (deviceState.includes("not_inuse") || deviceState.includes("not in use") || deviceState === "idle") {
                 normalizedStatus = "active";
               } else if (deviceState.includes("unavailable") || deviceState.includes("invalid")) {
                 normalizedStatus = "unavailable";

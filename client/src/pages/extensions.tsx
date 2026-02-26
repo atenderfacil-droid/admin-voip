@@ -137,7 +137,8 @@ export default function Extensions() {
 
   const { data: liveStatus, dataUpdatedAt, isRefetching: isRefetchingLive } = useQuery<LiveStatusMap>({
     queryKey: ["/api/extensions/live-status"],
-    refetchInterval: 15000,
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 
   const getLiveInfo = useCallback((ext: Extension): LiveStatusEntry | null => {
