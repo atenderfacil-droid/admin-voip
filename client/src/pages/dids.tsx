@@ -134,11 +134,15 @@ export default function Dids() {
       const res = await apiRequest("POST", "/api/dids", payload);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/dids"] });
       setOpen(false);
       form.reset();
-      toast({ title: "DID criado com sucesso" });
+      toast({
+        title: data.provisioned ? "DID criado e aplicado no servidor" : "DID criado no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao criar DID", description: error.message, variant: "destructive" });
@@ -160,12 +164,16 @@ export default function Dids() {
       const res = await apiRequest("PATCH", `/api/dids/${id}`, payload);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/dids"] });
       setOpen(false);
       setEditing(null);
       form.reset();
-      toast({ title: "DID atualizado com sucesso" });
+      toast({
+        title: data.provisioned ? "DID atualizado e aplicado no servidor" : "DID atualizado no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao atualizar DID", description: error.message, variant: "destructive" });
@@ -174,11 +182,16 @@ export default function Dids() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/dids/${id}`);
+      const res = await apiRequest("DELETE", `/api/dids/${id}`);
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/dids"] });
-      toast({ title: "DID removido com sucesso" });
+      toast({
+        title: data.provisioned ? "DID removido e aplicado no servidor" : "DID removido do banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao remover DID", description: error.message, variant: "destructive" });

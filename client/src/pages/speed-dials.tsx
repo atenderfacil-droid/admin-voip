@@ -126,11 +126,15 @@ export default function SpeedDials() {
       const res = await apiRequest("POST", "/api/speed-dials", payload);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/speed-dials"] });
       setOpen(false);
       form.reset();
-      toast({ title: "Speed Dial criado com sucesso" });
+      toast({
+        title: data.provisioned ? "Speed Dial criado e aplicado no servidor" : "Speed Dial criado no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao criar Speed Dial", description: error.message, variant: "destructive" });
@@ -148,12 +152,16 @@ export default function SpeedDials() {
       const res = await apiRequest("PUT", `/api/speed-dials/${id}`, payload);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/speed-dials"] });
       setOpen(false);
       setEditing(null);
       form.reset();
-      toast({ title: "Speed Dial atualizado com sucesso" });
+      toast({
+        title: data.provisioned ? "Speed Dial atualizado e aplicado no servidor" : "Speed Dial atualizado no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao atualizar Speed Dial", description: error.message, variant: "destructive" });
@@ -162,12 +170,17 @@ export default function SpeedDials() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/speed-dials/${id}`);
+      const res = await apiRequest("DELETE", `/api/speed-dials/${id}`);
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/speed-dials"] });
       setDeleteTarget(null);
-      toast({ title: "Speed Dial removido com sucesso" });
+      toast({
+        title: data.provisioned ? "Speed Dial removido e aplicado no servidor" : "Speed Dial removido do banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao remover Speed Dial", description: error.message, variant: "destructive" });

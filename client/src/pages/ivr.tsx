@@ -90,12 +90,16 @@ export default function IVR() {
       const res = await apiRequest("POST", "/api/ivr-menus", { ...data, options: ivrOptions });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/ivr-menus"] });
       setOpen(false);
       form.reset();
       setIvrOptions([]);
-      toast({ title: "Menu IVR criado com sucesso" });
+      toast({
+        title: data.provisioned ? "Menu IVR criado e aplicado no servidor" : "Menu IVR criado no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao criar menu IVR", description: error.message, variant: "destructive" });
@@ -108,13 +112,17 @@ export default function IVR() {
       const res = await apiRequest("PATCH", `/api/ivr-menus/${id}`, { ...body, options: ivrOptions });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/ivr-menus"] });
       setOpen(false);
       setEditing(null);
       form.reset();
       setIvrOptions([]);
-      toast({ title: "Menu IVR atualizado com sucesso" });
+      toast({
+        title: data.provisioned ? "Menu IVR atualizado e aplicado no servidor" : "Menu IVR atualizado no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao atualizar menu IVR", description: error.message, variant: "destructive" });
@@ -123,11 +131,16 @@ export default function IVR() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/ivr-menus/${id}`);
+      const res = await apiRequest("DELETE", `/api/ivr-menus/${id}`);
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/ivr-menus"] });
-      toast({ title: "Menu IVR removido com sucesso" });
+      toast({
+        title: data.provisioned ? "Menu IVR removido e aplicado no servidor" : "Menu IVR removido do banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao remover menu IVR", description: error.message, variant: "destructive" });

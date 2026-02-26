@@ -21,6 +21,24 @@ import {
   type Server as ServerType,
 } from "@shared/schema";
 import { log } from "./index";
+
+async function tryProvision(serverId: string, provisionFn: (server: ServerType) => Promise<void>): Promise<{ provisioned: boolean; provisioningMessage: string }> {
+  try {
+    const server = await storage.getServer(serverId);
+    if (!server) {
+      return { provisioned: false, provisioningMessage: "Servidor não encontrado" };
+    }
+    if (!server.sshEnabled) {
+      return { provisioned: false, provisioningMessage: "SSH não habilitado neste servidor. Habilite o SSH nas configurações do servidor para aplicar alterações automaticamente." };
+    }
+    await provisionFn(server);
+    return { provisioned: true, provisioningMessage: "Configuração aplicada no servidor com sucesso" };
+  } catch (err: any) {
+    log(`Provisionamento falhou: ${err.message}`);
+    return { provisioned: false, provisioningMessage: `Falha ao aplicar no servidor: ${err.message}` };
+  }
+}
+
 import {
   provisionExtension,
   removeExtension,
@@ -1188,12 +1206,8 @@ export async function registerRoutes(
         return res.status(409).json({ message: `Ramal ${data.number} já existe neste servidor` });
       }
       const ext = await storage.createExtension(data);
-      storage.getServer(ext.serverId).then(server => {
-        if (server && server.sshEnabled) {
-          provisionExtension(server, ext).catch(err => log(`Provisionamento falhou: ${err.message}`));
-        }
-      }).catch(() => {});
-      res.status(201).json(ext);
+      const provResult = await tryProvision(ext.serverId, (server) => provisionExtension(server, ext));
+      res.status(201).json({ ...ext, ...provResult });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -1217,12 +1231,8 @@ export async function registerRoutes(
     try {
       const ext = await storage.updateExtension(req.params.id, data);
       if (!ext) return res.status(404).json({ message: "Ramal não encontrado" });
-      storage.getServer(ext.serverId).then(server => {
-        if (server && server.sshEnabled) {
-          provisionExtension(server, ext).catch(err => log(`Provisionamento falhou: ${err.message}`));
-        }
-      }).catch(() => {});
-      res.json(ext);
+      const provResult = await tryProvision(ext.serverId, (server) => provisionExtension(server, ext));
+      res.json({ ...ext, ...provResult });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -1238,12 +1248,8 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Acesso negado" });
     }
     await storage.deleteExtension(req.params.id);
-    storage.getServer(existing.serverId).then(server => {
-      if (server && server.sshEnabled) {
-        removeExtension(server, existing).catch(err => log(`Provisionamento falhou: ${err.message}`));
-      }
-    }).catch(() => {});
-    res.status(204).send();
+    const provResult = await tryProvision(existing.serverId, (server) => removeExtension(server, existing));
+    res.json({ success: true, ...provResult });
   });
 
   // SIP Trunks (multi-tenant)
@@ -1275,12 +1281,8 @@ export async function registerRoutes(
     const data = { ...result.data, companyId };
     try {
       const trunk = await storage.createSipTrunk(data);
-      storage.getServer(trunk.serverId).then(server => {
-        if (server && server.sshEnabled) {
-          provisionSipTrunk(server, trunk).catch(err => log(`Provisionamento falhou: ${err.message}`));
-        }
-      }).catch(() => {});
-      res.status(201).json(trunk);
+      const provResult = await tryProvision(trunk.serverId, (server) => provisionSipTrunk(server, trunk));
+      res.status(201).json({ ...trunk, ...provResult });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -1304,12 +1306,8 @@ export async function registerRoutes(
     try {
       const trunk = await storage.updateSipTrunk(req.params.id, data);
       if (!trunk) return res.status(404).json({ message: "Tronco SIP não encontrado" });
-      storage.getServer(trunk.serverId).then(server => {
-        if (server && server.sshEnabled) {
-          provisionSipTrunk(server, trunk).catch(err => log(`Provisionamento falhou: ${err.message}`));
-        }
-      }).catch(() => {});
-      res.json(trunk);
+      const provResult = await tryProvision(trunk.serverId, (server) => provisionSipTrunk(server, trunk));
+      res.json({ ...trunk, ...provResult });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -1325,12 +1323,8 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Acesso negado" });
     }
     await storage.deleteSipTrunk(req.params.id);
-    storage.getServer(existing.serverId).then(server => {
-      if (server && server.sshEnabled) {
-        removeSipTrunk(server, existing).catch(err => log(`Provisionamento falhou: ${err.message}`));
-      }
-    }).catch(() => {});
-    res.status(204).send();
+    const provResult = await tryProvision(existing.serverId, (server) => removeSipTrunk(server, existing));
+    res.json({ success: true, ...provResult });
   });
 
   // IVR Menus (multi-tenant)
@@ -1362,12 +1356,8 @@ export async function registerRoutes(
     const data = { ...result.data, companyId };
     try {
       const menu = await storage.createIvrMenu(data);
-      storage.getServer(menu.serverId).then(server => {
-        if (server && server.sshEnabled) {
-          provisionIvrMenu(server, menu).catch(err => log(`Provisionamento falhou: ${err.message}`));
-        }
-      }).catch(() => {});
-      res.status(201).json(menu);
+      const provResult = await tryProvision(menu.serverId, (server) => provisionIvrMenu(server, menu));
+      res.status(201).json({ ...menu, ...provResult });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -1391,12 +1381,8 @@ export async function registerRoutes(
     try {
       const menu = await storage.updateIvrMenu(req.params.id, data);
       if (!menu) return res.status(404).json({ message: "Menu IVR não encontrado" });
-      storage.getServer(menu.serverId).then(server => {
-        if (server && server.sshEnabled) {
-          provisionIvrMenu(server, menu).catch(err => log(`Provisionamento falhou: ${err.message}`));
-        }
-      }).catch(() => {});
-      res.json(menu);
+      const provResult = await tryProvision(menu.serverId, (server) => provisionIvrMenu(server, menu));
+      res.json({ ...menu, ...provResult });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -1412,12 +1398,8 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Acesso negado" });
     }
     await storage.deleteIvrMenu(req.params.id);
-    storage.getServer(existing.serverId).then(server => {
-      if (server && server.sshEnabled) {
-        removeIvrMenu(server, existing).catch(err => log(`Provisionamento falhou: ${err.message}`));
-      }
-    }).catch(() => {});
-    res.status(204).send();
+    const provResult = await tryProvision(existing.serverId, (server) => removeIvrMenu(server, existing));
+    res.json({ success: true, ...provResult });
   });
 
   // Queues (multi-tenant)
@@ -1449,12 +1431,8 @@ export async function registerRoutes(
     const data = { ...result.data, companyId };
     try {
       const queue = await storage.createQueue(data);
-      storage.getServer(queue.serverId).then(server => {
-        if (server && server.sshEnabled) {
-          provisionQueue(server, queue).catch(err => log(`Provisionamento falhou: ${err.message}`));
-        }
-      }).catch(() => {});
-      res.status(201).json(queue);
+      const provResult = await tryProvision(queue.serverId, (server) => provisionQueue(server, queue));
+      res.status(201).json({ ...queue, ...provResult });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -1478,12 +1456,8 @@ export async function registerRoutes(
     try {
       const queue = await storage.updateQueue(req.params.id, data);
       if (!queue) return res.status(404).json({ message: "Fila não encontrada" });
-      storage.getServer(queue.serverId).then(server => {
-        if (server && server.sshEnabled) {
-          provisionQueue(server, queue).catch(err => log(`Provisionamento falhou: ${err.message}`));
-        }
-      }).catch(() => {});
-      res.json(queue);
+      const provResult = await tryProvision(queue.serverId, (server) => provisionQueue(server, queue));
+      res.json({ ...queue, ...provResult });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -1499,12 +1473,8 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Acesso negado" });
     }
     await storage.deleteQueue(req.params.id);
-    storage.getServer(existing.serverId).then(server => {
-      if (server && server.sshEnabled) {
-        removeQueue(server, existing).catch(err => log(`Provisionamento falhou: ${err.message}`));
-      }
-    }).catch(() => {});
-    res.status(204).send();
+    const provResult = await tryProvision(existing.serverId, (server) => removeQueue(server, existing));
+    res.json({ success: true, ...provResult });
   });
 
   // Call Logs (multi-tenant, read-only with filters)
@@ -1652,12 +1622,8 @@ export async function registerRoutes(
       const data = insertDidSchema.parse(req.body);
       if (!canAccessCompany(req, data.companyId)) return res.status(403).json({ message: "Acesso negado" });
       const created = await storage.createDid(data);
-      storage.getServer(created.serverId).then(server => {
-        if (server && server.sshEnabled) {
-          provisionDid(server, created).catch(err => log(`Provisionamento falhou: ${err.message}`));
-        }
-      }).catch(() => {});
-      res.status(201).json(created);
+      const provResult = await tryProvision(created.serverId, (server) => provisionDid(server, created));
+      res.status(201).json({ ...created, ...provResult });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -1671,13 +1637,11 @@ export async function registerRoutes(
       if (!canAccessCompany(req, existing.companyId)) return res.status(403).json({ message: "Acesso negado" });
       const updated = await storage.updateDid(req.params.id, req.body);
       if (updated) {
-        storage.getServer(updated.serverId).then(server => {
-          if (server && server.sshEnabled) {
-            provisionDid(server, updated).catch(err => log(`Provisionamento falhou: ${err.message}`));
-          }
-        }).catch(() => {});
+        const provResult = await tryProvision(updated.serverId, (server) => provisionDid(server, updated));
+        res.json({ ...updated, ...provResult });
+      } else {
+        res.json(updated);
       }
-      res.json(updated);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -1689,12 +1653,8 @@ export async function registerRoutes(
     if (!existing) return res.status(404).json({ message: "DID não encontrado" });
     if (!canAccessCompany(req, existing.companyId)) return res.status(403).json({ message: "Acesso negado" });
     await storage.deleteDid(req.params.id);
-    storage.getServer(existing.serverId).then(server => {
-      if (server && server.sshEnabled) {
-        removeDid(server, existing).catch(err => log(`Provisionamento falhou: ${err.message}`));
-      }
-    }).catch(() => {});
-    res.status(204).send();
+    const provResult = await tryProvision(existing.serverId, (server) => removeDid(server, existing));
+    res.json({ success: true, ...provResult });
   });
 
   // ===== CALLER ID RULES ROUTES =====
@@ -1720,12 +1680,8 @@ export async function registerRoutes(
       const created = await storage.createCallerIdRule(data);
       const allRules = await storage.getCallerIdRules(created.companyId);
       const serverRules = allRules.filter(r => r.serverId === created.serverId);
-      storage.getServer(created.serverId).then(server => {
-        if (server && server.sshEnabled) {
-          provisionCallerIdRules(server, serverRules).catch(err => log(`Provisionamento CallerID falhou: ${err.message}`));
-        }
-      }).catch(() => {});
-      res.status(201).json(created);
+      const provResult = await tryProvision(created.serverId, (server) => provisionCallerIdRules(server, serverRules));
+      res.status(201).json({ ...created, ...provResult });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -1741,13 +1697,11 @@ export async function registerRoutes(
       if (updated) {
         const allRules = await storage.getCallerIdRules(updated.companyId);
         const serverRules = allRules.filter(r => r.serverId === updated.serverId);
-        storage.getServer(updated.serverId).then(server => {
-          if (server && server.sshEnabled) {
-            provisionCallerIdRules(server, serverRules).catch(err => log(`Provisionamento CallerID falhou: ${err.message}`));
-          }
-        }).catch(() => {});
+        const provResult = await tryProvision(updated.serverId, (server) => provisionCallerIdRules(server, serverRules));
+        res.json({ ...updated, ...provResult });
+      } else {
+        res.json(updated);
       }
-      res.json(updated);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -1761,12 +1715,8 @@ export async function registerRoutes(
     await storage.deleteCallerIdRule(req.params.id);
     const allRules = await storage.getCallerIdRules(existing.companyId);
     const serverRules = allRules.filter(r => r.serverId === existing.serverId);
-    storage.getServer(existing.serverId).then(server => {
-      if (server && server.sshEnabled) {
-        provisionCallerIdRules(server, serverRules).catch(err => log(`Provisionamento CallerID falhou: ${err.message}`));
-      }
-    }).catch(() => {});
-    res.status(204).send();
+    const provResult = await tryProvision(existing.serverId, (server) => provisionCallerIdRules(server, serverRules));
+    res.json({ success: true, ...provResult });
   });
 
   // ===== CALL REPORTS ROUTES =====
@@ -1837,13 +1787,9 @@ export async function registerRoutes(
     });
     if (!parsed.success) return res.status(400).json({ message: "Dados inválidos", errors: parsed.error.flatten() });
     const room = await storage.createConferenceRoom(parsed.data);
-    storage.getServer(room.serverId).then(server => {
-      if (server && server.sshEnabled) {
-        provisionConferenceRoom(server, room).catch(err => log(`Provisionamento falhou: ${err.message}`));
-      }
-    }).catch(() => {});
+    const provResult = await tryProvision(room.serverId, (server) => provisionConferenceRoom(server, room));
     await logActivity(req, "create", "conference", room.id, `Sala criada: ${room.name}`);
-    res.status(201).json(room);
+    res.status(201).json({ ...room, ...provResult });
   });
 
   app.put("/api/conference-rooms/:id", requireAuth, async (req, res) => {
@@ -1853,13 +1799,9 @@ export async function registerRoutes(
       companyId: enforceCompanyId(req, req.body.companyId),
     });
     if (!updated) return res.status(404).json({ message: "Sala não encontrada" });
-    storage.getServer(updated.serverId).then(server => {
-      if (server && server.sshEnabled) {
-        provisionConferenceRoom(server, updated).catch(err => log(`Provisionamento falhou: ${err.message}`));
-      }
-    }).catch(() => {});
+    const provResult = await tryProvision(updated.serverId, (server) => provisionConferenceRoom(server, updated));
     await logActivity(req, "update", "conference", updated.id, `Sala atualizada: ${updated.name}`);
-    res.json(updated);
+    res.json({ ...updated, ...provResult });
   });
 
   app.delete("/api/conference-rooms/:id", requireAuth, async (req, res) => {
@@ -1868,13 +1810,11 @@ export async function registerRoutes(
     if (room) await logActivity(req, "delete", "conference", req.params.id, `Sala excluída: ${room.name}`);
     await storage.deleteConferenceRoom(req.params.id);
     if (room) {
-      storage.getServer(room.serverId).then(server => {
-        if (server && server.sshEnabled) {
-          removeConferenceRoom(server, room).catch(err => log(`Provisionamento falhou: ${err.message}`));
-        }
-      }).catch(() => {});
+      const provResult = await tryProvision(room.serverId, (server) => removeConferenceRoom(server, room));
+      res.json({ success: true, ...provResult });
+    } else {
+      res.json({ success: true, provisioned: false, provisioningMessage: "Sala não encontrada para provisionar" });
     }
-    res.json({ success: true });
   });
 
   // === CONFERENCE ROOMS: Live status via AMI (ConfBridge) ===
@@ -1957,13 +1897,9 @@ export async function registerRoutes(
     const dial = await storage.createSpeedDial(parsed.data);
     const allDials = await storage.getSpeedDials(dial.companyId);
     const serverDials = allDials.filter(d => d.serverId === dial.serverId);
-    storage.getServer(dial.serverId).then(server => {
-      if (server && server.sshEnabled) {
-        provisionSpeedDials(server, serverDials).catch(err => log(`Provisionamento SpeedDial falhou: ${err.message}`));
-      }
-    }).catch(() => {});
+    const provResult = await tryProvision(dial.serverId, (server) => provisionSpeedDials(server, serverDials));
     await logActivity(req, "create", "speedDial", dial.id, `Speed Dial criado: ${dial.label}`);
-    res.status(201).json(dial);
+    res.status(201).json({ ...dial, ...provResult });
   });
 
   app.put("/api/speed-dials/:id", requireAuth, async (req, res) => {
@@ -1974,13 +1910,9 @@ export async function registerRoutes(
     if (!updated) return res.status(404).json({ message: "Speed Dial não encontrado" });
     const allDials = await storage.getSpeedDials(updated.companyId);
     const serverDials = allDials.filter(d => d.serverId === updated.serverId);
-    storage.getServer(updated.serverId).then(server => {
-      if (server && server.sshEnabled) {
-        provisionSpeedDials(server, serverDials).catch(err => log(`Provisionamento SpeedDial falhou: ${err.message}`));
-      }
-    }).catch(() => {});
+    const provResult = await tryProvision(updated.serverId, (server) => provisionSpeedDials(server, serverDials));
     await logActivity(req, "update", "speedDial", updated.id, `Speed Dial atualizado: ${updated.label}`);
-    res.json(updated);
+    res.json({ ...updated, ...provResult });
   });
 
   app.delete("/api/speed-dials/:id", requireAuth, async (req, res) => {
@@ -1991,13 +1923,11 @@ export async function registerRoutes(
     if (dial) {
       const allDials = await storage.getSpeedDials(dial.companyId);
       const serverDials = allDials.filter(d => d.serverId === dial.serverId);
-      storage.getServer(dial.serverId).then(server => {
-        if (server && server.sshEnabled) {
-          provisionSpeedDials(server, serverDials).catch(err => log(`Provisionamento SpeedDial falhou: ${err.message}`));
-        }
-      }).catch(() => {});
+      const provResult = await tryProvision(dial.serverId, (server) => provisionSpeedDials(server, serverDials));
+      res.json({ success: true, ...provResult });
+    } else {
+      res.json({ success: true, provisioned: false, provisioningMessage: "Speed Dial não encontrado para provisionar" });
     }
-    res.json({ success: true });
   });
 
   // === COMPARE SERVER DATA ===

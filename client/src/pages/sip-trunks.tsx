@@ -93,11 +93,15 @@ export default function SipTrunks() {
       const res = await apiRequest("POST", "/api/sip-trunks", data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/sip-trunks"] });
       setOpen(false);
       form.reset();
-      toast({ title: "Tronco SIP criado com sucesso" });
+      toast({
+        title: data.provisioned ? "Tronco SIP criado e aplicado no servidor" : "Tronco SIP criado no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao criar tronco SIP", description: error.message, variant: "destructive" });
@@ -110,12 +114,16 @@ export default function SipTrunks() {
       const res = await apiRequest("PATCH", `/api/sip-trunks/${id}`, body);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/sip-trunks"] });
       setOpen(false);
       setEditing(null);
       form.reset();
-      toast({ title: "Tronco SIP atualizado com sucesso" });
+      toast({
+        title: data.provisioned ? "Tronco SIP atualizado e aplicado no servidor" : "Tronco SIP atualizado no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao atualizar tronco SIP", description: error.message, variant: "destructive" });
@@ -124,11 +132,16 @@ export default function SipTrunks() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/sip-trunks/${id}`);
+      const res = await apiRequest("DELETE", `/api/sip-trunks/${id}`);
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/sip-trunks"] });
-      toast({ title: "Tronco SIP removido com sucesso" });
+      toast({
+        title: data.provisioned ? "Tronco SIP removido e aplicado no servidor" : "Tronco SIP removido do banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao remover tronco SIP", description: error.message, variant: "destructive" });

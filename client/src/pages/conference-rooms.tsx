@@ -140,11 +140,15 @@ export default function ConferenceRooms() {
       const res = await apiRequest("POST", "/api/conference-rooms", data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/conference-rooms"] });
       setOpen(false);
       form.reset();
-      toast({ title: "Sala de conferência criada com sucesso" });
+      toast({
+        title: data.provisioned ? "Sala criada e aplicada no servidor" : "Sala criada no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao criar sala", description: error.message, variant: "destructive" });
@@ -157,12 +161,16 @@ export default function ConferenceRooms() {
       const res = await apiRequest("PUT", `/api/conference-rooms/${id}`, body);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/conference-rooms"] });
       setOpen(false);
       setEditing(null);
       form.reset();
-      toast({ title: "Sala de conferência atualizada com sucesso" });
+      toast({
+        title: data.provisioned ? "Sala atualizada e aplicada no servidor" : "Sala atualizada no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao atualizar sala", description: error.message, variant: "destructive" });
@@ -171,12 +179,17 @@ export default function ConferenceRooms() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/conference-rooms/${id}`);
+      const res = await apiRequest("DELETE", `/api/conference-rooms/${id}`);
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/conference-rooms"] });
       setDeleteTarget(null);
-      toast({ title: "Sala de conferência removida com sucesso" });
+      toast({
+        title: data.provisioned ? "Sala removida e aplicada no servidor" : "Sala removida do banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao remover sala", description: error.message, variant: "destructive" });

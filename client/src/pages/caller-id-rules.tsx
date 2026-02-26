@@ -125,11 +125,15 @@ export default function CallerIdRules() {
       const res = await apiRequest("POST", "/api/caller-id-rules", payload);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/caller-id-rules"] });
       setOpen(false);
       form.reset();
-      toast({ title: "Regra criada com sucesso" });
+      toast({
+        title: data.provisioned ? "Regra criada e aplicada no servidor" : "Regra criada no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao criar regra", description: error.message, variant: "destructive" });
@@ -148,12 +152,16 @@ export default function CallerIdRules() {
       const res = await apiRequest("PATCH", `/api/caller-id-rules/${id}`, payload);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/caller-id-rules"] });
       setOpen(false);
       setEditing(null);
       form.reset();
-      toast({ title: "Regra atualizada com sucesso" });
+      toast({
+        title: data.provisioned ? "Regra atualizada e aplicada no servidor" : "Regra atualizada no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao atualizar regra", description: error.message, variant: "destructive" });
@@ -162,11 +170,16 @@ export default function CallerIdRules() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/caller-id-rules/${id}`);
+      const res = await apiRequest("DELETE", `/api/caller-id-rules/${id}`);
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/caller-id-rules"] });
-      toast({ title: "Regra removida com sucesso" });
+      toast({
+        title: data.provisioned ? "Regra removida e aplicada no servidor" : "Regra removida do banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao remover regra", description: error.message, variant: "destructive" });

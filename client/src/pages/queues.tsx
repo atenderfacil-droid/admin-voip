@@ -122,11 +122,15 @@ export default function Queues() {
       const res = await apiRequest("POST", "/api/queues", data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/queues"] });
       setOpen(false);
       form.reset();
-      toast({ title: "Fila criada com sucesso" });
+      toast({
+        title: data.provisioned ? "Fila criada e aplicada no servidor" : "Fila criada no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao criar fila", description: error.message, variant: "destructive" });
@@ -139,12 +143,16 @@ export default function Queues() {
       const res = await apiRequest("PATCH", `/api/queues/${id}`, body);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/queues"] });
       setOpen(false);
       setEditing(null);
       form.reset();
-      toast({ title: "Fila atualizada com sucesso" });
+      toast({
+        title: data.provisioned ? "Fila atualizada e aplicada no servidor" : "Fila atualizada no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao atualizar fila", description: error.message, variant: "destructive" });
@@ -153,11 +161,16 @@ export default function Queues() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/queues/${id}`);
+      const res = await apiRequest("DELETE", `/api/queues/${id}`);
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/queues"] });
-      toast({ title: "Fila removida com sucesso" });
+      toast({
+        title: data.provisioned ? "Fila removida e aplicada no servidor" : "Fila removida do banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao remover fila", description: error.message, variant: "destructive" });

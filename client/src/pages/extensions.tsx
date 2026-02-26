@@ -226,12 +226,16 @@ export default function Extensions() {
       const res = await apiRequest("POST", "/api/extensions", data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/extensions"] });
       setOpen(false);
       form.reset();
       setDuplicateWarning(null);
-      toast({ title: "Ramal criado com sucesso" });
+      toast({
+        title: data.provisioned ? "Ramal criado e aplicado no servidor" : "Ramal criado no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao criar ramal", description: error.message, variant: "destructive" });
@@ -244,12 +248,16 @@ export default function Extensions() {
       const res = await apiRequest("PATCH", `/api/extensions/${id}`, body);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/extensions"] });
       setOpen(false);
       setEditing(null);
       form.reset();
-      toast({ title: "Ramal atualizado com sucesso" });
+      toast({
+        title: data.provisioned ? "Ramal atualizado e aplicado no servidor" : "Ramal atualizado no banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao atualizar ramal", description: error.message, variant: "destructive" });
@@ -258,11 +266,16 @@ export default function Extensions() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/extensions/${id}`);
+      const res = await apiRequest("DELETE", `/api/extensions/${id}`);
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/extensions"] });
-      toast({ title: "Ramal removido com sucesso" });
+      toast({
+        title: data.provisioned ? "Ramal removido e aplicado no servidor" : "Ramal removido do banco de dados",
+        description: data.provisioned ? undefined : data.provisioningMessage,
+        variant: data.provisioned ? "default" : "destructive",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao remover ramal", description: error.message, variant: "destructive" });
