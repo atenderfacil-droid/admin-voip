@@ -7,7 +7,6 @@ import {
   Server,
   Plus,
   Search,
-  MoreHorizontal,
   Edit,
   Trash2,
   Activity,
@@ -36,7 +35,6 @@ import {
   GitCompare,
   Download,
   ArrowLeftRight,
-  Upload,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,7 +45,6 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -1554,29 +1551,20 @@ export default function Servers() {
                     <Badge variant={server.status === "online" ? "default" : "secondary"} className="text-[10px]">
                       {config.label}
                     </Badge>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" data-testid={`button-menu-server-${server.id}`}>
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openEdit(server)} data-testid={`menu-edit-server-${server.id}`}>
-                          <Edit className="w-4 h-4 mr-2" /> Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setExpandedServer(isExpanded ? null : server.id)} data-testid={`menu-ami-panel-${server.id}`}>
-                          <Eye className="w-4 h-4 mr-2" /> {isExpanded ? "Fechar Painel" : "Painel AMI"}
-                        </DropdownMenuItem>
-                        {server.amiEnabled && (
-                          <DropdownMenuItem onClick={() => setCompareServer(server)} data-testid={`menu-compare-server-${server.id}`}>
-                            <GitCompare className="w-4 h-4 mr-2" /> Comparar Informações
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onClick={() => deleteMutation.mutate(server.id)} className="text-destructive" data-testid={`menu-delete-server-${server.id}`}>
-                          <Trash2 className="w-4 h-4 mr-2" /> Remover
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <Button variant="outline" size="sm" onClick={() => openEdit(server)} data-testid={`button-edit-server-${server.id}`}>
+                      <Edit className="w-3.5 h-3.5 mr-1.5" /> Editar
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setExpandedServer(isExpanded ? null : server.id)} data-testid={`button-ami-panel-${server.id}`}>
+                      <Eye className="w-3.5 h-3.5 mr-1.5" /> {isExpanded ? "Fechar Painel" : "Painel AMI"}
+                    </Button>
+                    {server.amiEnabled && (
+                      <Button variant="outline" size="sm" onClick={() => setCompareServer(server)} data-testid={`button-compare-server-${server.id}`}>
+                        <GitCompare className="w-3.5 h-3.5 mr-1.5" /> Comparar
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" className="text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => deleteMutation.mutate(server.id)} data-testid={`button-delete-server-${server.id}`}>
+                      <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Remover
+                    </Button>
                   </div>
                 </div>
 
