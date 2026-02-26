@@ -2005,7 +2005,7 @@ export async function registerRoutes(
       if (!canAccessCompany(req, server.companyId)) return res.status(403).json({ message: "Acesso negado" });
       if (!server.sshEnabled) return res.status(400).json({ message: "SSH não habilitado neste servidor" });
 
-      const { types } = req.body;
+      const types = req.body?.types;
       const companyId = getCompanyFilter(req);
 
       const results: { type: string; count: number; errors: string[] }[] = [];
