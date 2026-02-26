@@ -36,6 +36,7 @@ import {
   GitCompare,
   Download,
   ArrowLeftRight,
+  Upload,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -869,6 +870,24 @@ function CompareDialog({ server, onClose }: { server: ServerType; onClose: () =>
     },
   });
 
+  const syncMutation = useMutation({
+    mutationFn: async (types?: string[]) => {
+      const res = await apiRequest("POST", `/api/servers/${server.id}/sync-to-server`, { types });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: data.success ? "Sincronização concluída" : "Sincronização com erros",
+        description: data.message,
+        variant: data.success ? "default" : "destructive",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/servers", server.id, "compare"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Erro na sincronização", description: err.message, variant: "destructive" });
+    },
+  });
+
   const toggleImport = (name: string) => {
     setSelectedImport((prev) =>
       prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
@@ -878,7 +897,8 @@ function CompareDialog({ server, onClose }: { server: ServerType; onClose: () =>
   const renderSection = (
     title: string,
     data: { onlyInServer: string[]; onlyInSystem: string[]; inBoth: string[] } | undefined,
-    canImport: boolean
+    canImport: boolean,
+    syncType?: string
   ) => {
     if (!data) return null;
     const total = data.onlyInServer.length + data.onlyInSystem.length + data.inBoth.length;

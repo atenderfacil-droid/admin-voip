@@ -1997,6 +1997,135 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/servers/:id/sync-to-server", requireAuth, async (req, res) => {
+    if (!isAdminOrAbove(req)) return res.status(403).json({ message: "Permissão insuficiente" });
+    try {
+      const server = await storage.getServer(req.params.id);
+      if (!server) return res.status(404).json({ message: "Servidor não encontrado" });
+      if (!canAccessCompany(req, server.companyId)) return res.status(403).json({ message: "Acesso negado" });
+      if (!server.sshEnabled) return res.status(400).json({ message: "SSH não habilitado neste servidor" });
+
+      const { types } = req.body;
+      const companyId = getCompanyFilter(req);
+
+      const results: { type: string; count: number; errors: string[] }[] = [];
+
+      if (!types || types.includes("extensions")) {
+        const extensions = (await storage.getExtensions(companyId)).filter(e => e.serverId === server.id);
+        const errors: string[] = [];
+        for (const ext of extensions) {
+          try {
+            await provisionExtension(server, ext);
+          } catch (err: any) {
+            errors.push(`Ramal ${ext.number}: ${err.message}`);
+          }
+        }
+        results.push({ type: "extensions", count: extensions.length, errors });
+      }
+
+      if (!types || types.includes("trunks")) {
+        const trunks = (await storage.getSipTrunks(companyId)).filter(t => t.serverId === server.id);
+        const errors: string[] = [];
+        for (const trunk of trunks) {
+          try {
+            await provisionSipTrunk(server, trunk);
+          } catch (err: any) {
+            errors.push(`Tronco ${trunk.name}: ${err.message}`);
+          }
+        }
+        results.push({ type: "trunks", count: trunks.length, errors });
+      }
+
+      if (!types || types.includes("queues")) {
+        const queues = (await storage.getQueues(companyId)).filter(q => q.serverId === server.id);
+        const errors: string[] = [];
+        for (const queue of queues) {
+          try {
+            await provisionQueue(server, queue);
+          } catch (err: any) {
+            errors.push(`Fila ${queue.name}: ${err.message}`);
+          }
+        }
+        results.push({ type: "queues", count: queues.length, errors });
+      }
+
+      if (!types || types.includes("conferences")) {
+        const rooms = (await storage.getConferenceRooms(companyId)).filter(r => r.serverId === server.id);
+        const errors: string[] = [];
+        for (const room of rooms) {
+          try {
+            await provisionConferenceRoom(server, room);
+          } catch (err: any) {
+            errors.push(`Sala ${room.name}: ${err.message}`);
+          }
+        }
+        results.push({ type: "conferences", count: rooms.length, errors });
+      }
+
+      if (!types || types.includes("ivr")) {
+        const menus = (await storage.getIvrMenus(companyId)).filter(m => m.serverId === server.id);
+        const errors: string[] = [];
+        for (const menu of menus) {
+          try {
+            await provisionIvrMenu(server, menu);
+          } catch (err: any) {
+            errors.push(`IVR ${menu.name}: ${err.message}`);
+          }
+        }
+        results.push({ type: "ivr", count: menus.length, errors });
+      }
+
+      if (!types || types.includes("dids")) {
+        const dids = (await storage.getDids(companyId)).filter(d => d.serverId === server.id);
+        const errors: string[] = [];
+        for (const did of dids) {
+          try {
+            await provisionDid(server, did);
+          } catch (err: any) {
+            errors.push(`DID ${did.number}: ${err.message}`);
+          }
+        }
+        results.push({ type: "dids", count: dids.length, errors });
+      }
+
+      if (!types || types.includes("callerIdRules")) {
+        const rules = (await storage.getCallerIdRules(companyId)).filter(r => r.serverId === server.id);
+        const errors: string[] = [];
+        try {
+          await provisionCallerIdRules(server, rules);
+        } catch (err: any) {
+          errors.push(`CallerID Rules: ${err.message}`);
+        }
+        results.push({ type: "callerIdRules", count: rules.length, errors });
+      }
+
+      if (!types || types.includes("speedDials")) {
+        const dials = (await storage.getSpeedDials(companyId)).filter(d => d.serverId === server.id);
+        const errors: string[] = [];
+        try {
+          await provisionSpeedDials(server, dials);
+        } catch (err: any) {
+          errors.push(`Speed Dials: ${err.message}`);
+        }
+        results.push({ type: "speedDials", count: dials.length, errors });
+      }
+
+      const totalErrors = results.reduce((sum, r) => sum + r.errors.length, 0);
+      const totalItems = results.reduce((sum, r) => sum + r.count, 0);
+      res.json({
+        success: totalErrors === 0,
+        totalItems,
+        totalErrors,
+        results,
+        message: totalErrors === 0
+          ? `${totalItems} item(ns) sincronizado(s) com sucesso`
+          : `${totalItems - totalErrors} item(ns) sincronizado(s), ${totalErrors} erro(s)`,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // === VOICEMAIL: List via AMI ===
   app.get("/api/servers/:id/ami/voicemail-list", requireAuth, async (req, res) => {
     try {
