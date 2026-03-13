@@ -186,19 +186,30 @@ writetimeout = 5000
     steps[3].message = "manager.conf configurado com sucesso";
 
     steps[4].status = "running";
+    let reloadSuccess = false;
+
     let reloadResult = await execSSHCommand(client, `asterisk -rx 'manager reload' 2>/dev/null`);
-    if (reloadResult.code !== 0) {
+    if (reloadResult.code === 0 || reloadResult.stdout.toLowerCase().includes("reload")) {
+      reloadSuccess = true;
+    } else {
       reloadResult = await execSSHCommand(client, `sudo asterisk -rx 'manager reload' 2>/dev/null`);
+      if (reloadResult.code === 0 || reloadResult.stdout.toLowerCase().includes("reload")) {
+        reloadSuccess = true;
+      }
     }
 
-    if (reloadResult.code !== 0 && !reloadResult.stdout.toLowerCase().includes("reload")) {
-      const restartResult = await execSSHCommand(client, `sudo systemctl reload asterisk 2>/dev/null || sudo service asterisk reload 2>/dev/null`);
-      if (restartResult.code !== 0) {
+    if (!reloadSuccess) {
+      const restartResult = await execSSHCommand(client, `sudo systemctl restart asterisk 2>/dev/null || sudo service asterisk restart 2>/dev/null`);
+      if (restartResult.code === 0) {
+        reloadSuccess = true;
+        steps[4].message = "Asterisk reiniciado completamente (restart)";
+        await new Promise((r) => setTimeout(r, 3000));
+      } else {
         steps[4].status = "error";
-        steps[4].message = "Não foi possível recarregar o Asterisk. Pode ser necessário reiniciar manualmente.";
+        steps[4].message = "Não foi possível recarregar nem reiniciar o Asterisk. Reinicie manualmente com: systemctl restart asterisk";
         return {
           success: false,
-          message: "Configuração gravada, mas não foi possível recarregar o Asterisk. Reinicie o serviço manualmente.",
+          message: "Configuração gravada, mas não foi possível aplicar. Execute manualmente: sudo systemctl restart asterisk",
           steps,
           asteriskVersion,
         };
@@ -206,7 +217,7 @@ writetimeout = 5000
     }
 
     steps[4].status = "success";
-    steps[4].message = "Asterisk Manager recarregado";
+    if (!steps[4].message) steps[4].message = "Asterisk Manager recarregado";
 
     steps[5].status = "running";
     await new Promise((r) => setTimeout(r, 1500));

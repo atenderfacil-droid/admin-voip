@@ -47,42 +47,83 @@ function getAMIClient(server: ServerType): AsteriskAMI | null {
   );
 }
 
-async function writeAsteriskFile(server: ServerType, filePath: string, content: string): Promise<void> {
+async function openSSH(server: ServerType): Promise<any> {
   const sshConfig = getSSHConfig(server);
   if (!sshConfig) throw new Error("SSH não configurado neste servidor");
+  return connectSSH(sshConfig);
+}
 
-  const client = await connectSSH(sshConfig);
-  try {
-    const escapedContent = content.replace(/'/g, "'\\''");
-    let result = await execSSHCommand(client, `echo '${escapedContent}' > ${filePath}`);
+async function writeFileSSH(client: any, filePath: string, content: string): Promise<void> {
+  const escapedContent = content.replace(/'/g, "'\\''");
+  let result = await execSSHCommand(client, `echo '${escapedContent}' > ${filePath}`);
+  if (result.code !== 0) {
+    result = await execSSHCommand(client, `echo '${escapedContent}' | sudo tee ${filePath} > /dev/null`);
     if (result.code !== 0) {
-      result = await execSSHCommand(client, `echo '${escapedContent}' | sudo tee ${filePath} > /dev/null`);
-      if (result.code !== 0) {
-        throw new Error(`Falha ao escrever ${filePath}: ${result.stderr}`);
-      }
+      throw new Error(`Falha ao escrever ${filePath}: ${result.stderr}`);
     }
-    await execSSHCommand(client, `chown asterisk:asterisk ${filePath} 2>/dev/null; sudo chown asterisk:asterisk ${filePath} 2>/dev/null`);
-  } finally {
-    client.end();
+  }
+  await execSSHCommand(client, `chown asterisk:asterisk ${filePath} 2>/dev/null; sudo chown asterisk:asterisk ${filePath} 2>/dev/null`);
+}
+
+async function removeFileSSH(client: any, filePath: string): Promise<void> {
+  let result = await execSSHCommand(client, `rm -f ${filePath}`);
+  if (result.code !== 0) {
+    await execSSHCommand(client, `sudo rm -f ${filePath}`);
   }
 }
 
-async function removeAsteriskFile(server: ServerType, filePath: string): Promise<void> {
-  const sshConfig = getSSHConfig(server);
-  if (!sshConfig) throw new Error("SSH não configurado neste servidor");
+async function ensureIncludeSSH(client: any, mainFile: string, includeFile: string): Promise<void> {
+  const includeLine = `#include "${includeFile}"`;
+  const checkResult = await execSSHCommand(
+    client,
+    `grep -qF '${includeLine}' /etc/asterisk/${mainFile} 2>/dev/null && echo 'FOUND' || echo 'NOT_FOUND'`
+  );
 
-  const client = await connectSSH(sshConfig);
-  try {
-    let result = await execSSHCommand(client, `rm -f ${filePath}`);
+  if (checkResult.stdout.trim() === "NOT_FOUND") {
+    let result = await execSSHCommand(
+      client,
+      `echo '${includeLine}' >> /etc/asterisk/${mainFile}`
+    );
     if (result.code !== 0) {
-      await execSSHCommand(client, `sudo rm -f ${filePath}`);
+      await execSSHCommand(
+        client,
+        `echo '${includeLine}' | sudo tee -a /etc/asterisk/${mainFile} > /dev/null`
+      );
     }
-  } finally {
-    client.end();
   }
 }
 
-async function reloadAsteriskModule(server: ServerType, module: string): Promise<void> {
+async function removeFromIncludeFileSSH(client: any, filePath: string, identifier: string): Promise<void> {
+  let result = await execSSHCommand(
+    client,
+    `sed -i '/; ADMINVOIP:${identifier}/,/; END:${identifier}/d' ${filePath} 2>/dev/null`
+  );
+  if (result.code !== 0) {
+    await execSSHCommand(
+      client,
+      `sudo sed -i '/; ADMINVOIP:${identifier}/,/; END:${identifier}/d' ${filePath} 2>/dev/null`
+    );
+  }
+}
+
+async function appendToIncludeFileSSH(client: any, filePath: string, identifier: string, content: string): Promise<void> {
+  await removeFromIncludeFileSSH(client, filePath, identifier);
+  const escapedContent = content.replace(/'/g, "'\\''");
+  const line = `; ADMINVOIP:${identifier}\n${escapedContent}\n; END:${identifier}`;
+  let result = await execSSHCommand(client, `echo '${line}' >> ${filePath}`);
+  if (result.code !== 0) {
+    await execSSHCommand(client, `echo '${line}' | sudo tee -a ${filePath} > /dev/null`);
+  }
+}
+
+async function reloadModuleSSH(client: any, module: string): Promise<void> {
+  let result = await execSSHCommand(client, `asterisk -rx 'module reload ${module}' 2>/dev/null`);
+  if (result.code !== 0) {
+    await execSSHCommand(client, `sudo asterisk -rx 'module reload ${module}' 2>/dev/null`);
+  }
+}
+
+async function reloadModule(server: ServerType, client: any, module: string): Promise<void> {
   const ami = getAMIClient(server);
   if (ami) {
     try {
@@ -92,19 +133,7 @@ async function reloadAsteriskModule(server: ServerType, module: string): Promise
       log(`AMI reload falhou para ${module}, tentando via SSH: ${err.message}`);
     }
   }
-
-  const sshConfig = getSSHConfig(server);
-  if (sshConfig) {
-    const client = await connectSSH(sshConfig);
-    try {
-      let result = await execSSHCommand(client, `asterisk -rx 'module reload ${module}' 2>/dev/null`);
-      if (result.code !== 0) {
-        await execSSHCommand(client, `sudo asterisk -rx 'module reload ${module}' 2>/dev/null`);
-      }
-    } finally {
-      client.end();
-    }
-  }
+  await reloadModuleSSH(client, module);
 }
 
 // ===== EXTENSIONS (SIP/PJSIP Peers) =====
@@ -184,6 +213,7 @@ function generatePJSIPExtensionConfig(ext: Extension): string {
 }
 
 function generateExtensionDialplan(ext: Extension): string {
+  const protocol = ext.protocol === "PJSIP" ? "PJSIP" : "SIP";
   const lines = [
     `; Dialplan para ramal ${ext.number}`,
     `; Gerenciado pelo Admin VOIP`,
@@ -197,9 +227,8 @@ function generateExtensionDialplan(ext: Extension): string {
   }
 
   if (ext.callForwardNumber && ext.forwardType === "unconditional") {
-    lines.push(`same => n,Dial(SIP/${ext.callForwardNumber},${ext.ringTimeout || 30})`);
+    lines.push(`same => n,Dial(${protocol}/${ext.callForwardNumber},${ext.ringTimeout || 30})`);
   } else {
-    const protocol = ext.protocol === "PJSIP" ? "PJSIP" : "SIP";
     lines.push(`same => n,Dial(${protocol}/${ext.number},${ext.ringTimeout || 30})`);
   }
 
@@ -228,25 +257,30 @@ export async function provisionExtension(server: ServerType, ext: Extension): Pr
     ? generatePJSIPExtensionConfig(ext)
     : generateSIPExtensionConfig(ext);
 
-  await writeAsteriskFile(server, `${configDir}/${fileName}`, config);
+  const client = await openSSH(server);
+  try {
+    await writeFileSSH(client, `${configDir}/${fileName}`, config);
 
-  const dialplanFile = `extensions_ramal_${ext.number}.conf`;
-  const dialplanConfig = generateExtensionDialplan(ext);
-  await writeAsteriskFile(server, `${configDir}/${dialplanFile}`, dialplanConfig);
+    const dialplanFile = `extensions_ramal_${ext.number}.conf`;
+    const dialplanConfig = generateExtensionDialplan(ext);
+    await writeFileSSH(client, `${configDir}/${dialplanFile}`, dialplanConfig);
 
-  if (ext.voicemailEnabled && ext.mailbox) {
-    const vmLine = generateVoicemailConfig(ext);
-    if (vmLine) {
-      await appendToIncludeFile(server, `${configDir}/voicemail_adminvoip.conf`, ext.number, vmLine);
+    if (ext.voicemailEnabled && ext.mailbox) {
+      const vmLine = generateVoicemailConfig(ext);
+      if (vmLine) {
+        await appendToIncludeFileSSH(client, `${configDir}/voicemail_adminvoip.conf`, ext.number, vmLine);
+      }
     }
+
+    await ensureIncludeSSH(client, isPJSIP ? "pjsip.conf" : "sip.conf", fileName);
+    await ensureIncludeSSH(client, "extensions.conf", dialplanFile);
+
+    const reloadMod = isPJSIP ? "res_pjsip.so" : "chan_sip.so";
+    await reloadModule(server, client, reloadMod);
+    await reloadModule(server, client, "pbx_config");
+  } finally {
+    client.end();
   }
-
-  await ensureInclude(server, isPJSIP ? "pjsip.conf" : "sip.conf", fileName);
-  await ensureInclude(server, "extensions.conf", dialplanFile);
-
-  const reloadModule = isPJSIP ? "res_pjsip.so" : "chan_sip.so";
-  await reloadAsteriskModule(server, reloadModule);
-  await reloadAsteriskModule(server, "pbx_config");
 
   log(`Ramal ${ext.number} provisionado no servidor ${server.name}`);
 }
@@ -258,14 +292,18 @@ export async function removeExtension(server: ServerType, ext: Extension): Promi
     ? `pjsip_endpoint_${ext.number}.conf`
     : `sip_peer_${ext.number}.conf`;
 
-  await removeAsteriskFile(server, `${configDir}/${fileName}`);
-  await removeAsteriskFile(server, `${configDir}/extensions_ramal_${ext.number}.conf`);
+  const client = await openSSH(server);
+  try {
+    await removeFileSSH(client, `${configDir}/${fileName}`);
+    await removeFileSSH(client, `${configDir}/extensions_ramal_${ext.number}.conf`);
+    await removeFromIncludeFileSSH(client, `${configDir}/voicemail_adminvoip.conf`, ext.number);
 
-  await removeFromIncludeFile(server, `${configDir}/voicemail_adminvoip.conf`, ext.number);
-
-  const reloadModule = isPJSIP ? "res_pjsip.so" : "chan_sip.so";
-  await reloadAsteriskModule(server, reloadModule);
-  await reloadAsteriskModule(server, "pbx_config");
+    const reloadMod = isPJSIP ? "res_pjsip.so" : "chan_sip.so";
+    await reloadModule(server, client, reloadMod);
+    await reloadModule(server, client, "pbx_config");
+  } finally {
+    client.end();
+  }
 
   log(`Ramal ${ext.number} removido do servidor ${server.name}`);
 }
@@ -307,9 +345,14 @@ export async function provisionSipTrunk(server: ServerType, trunk: SipTrunk): Pr
   const configDir = "/etc/asterisk";
   const fileName = `sip_trunk_${trunk.name.replace(/[^a-zA-Z0-9_-]/g, "_")}.conf`;
 
-  await writeAsteriskFile(server, `${configDir}/${fileName}`, generateSIPTrunkConfig(trunk));
-  await ensureInclude(server, "sip.conf", fileName);
-  await reloadAsteriskModule(server, "chan_sip.so");
+  const client = await openSSH(server);
+  try {
+    await writeFileSSH(client, `${configDir}/${fileName}`, generateSIPTrunkConfig(trunk));
+    await ensureIncludeSSH(client, "sip.conf", fileName);
+    await reloadModule(server, client, "chan_sip.so");
+  } finally {
+    client.end();
+  }
 
   log(`Tronco SIP ${trunk.name} provisionado no servidor ${server.name}`);
 }
@@ -318,8 +361,13 @@ export async function removeSipTrunk(server: ServerType, trunk: SipTrunk): Promi
   const configDir = "/etc/asterisk";
   const fileName = `sip_trunk_${trunk.name.replace(/[^a-zA-Z0-9_-]/g, "_")}.conf`;
 
-  await removeAsteriskFile(server, `${configDir}/${fileName}`);
-  await reloadAsteriskModule(server, "chan_sip.so");
+  const client = await openSSH(server);
+  try {
+    await removeFileSSH(client, `${configDir}/${fileName}`);
+    await reloadModule(server, client, "chan_sip.so");
+  } finally {
+    client.end();
+  }
 
   log(`Tronco SIP ${trunk.name} removido do servidor ${server.name}`);
 }
@@ -371,14 +419,17 @@ export async function provisionQueue(server: ServerType, queue: Queue): Promise<
   const queueFile = `queue_${queue.name.replace(/[^a-zA-Z0-9_-]/g, "_")}.conf`;
   const dialplanFile = `extensions_queue_${queue.name.replace(/[^a-zA-Z0-9_-]/g, "_")}.conf`;
 
-  await writeAsteriskFile(server, `${configDir}/${queueFile}`, generateQueueConfig(queue));
-  await writeAsteriskFile(server, `${configDir}/${dialplanFile}`, generateQueueDialplan(queue));
-
-  await ensureInclude(server, "queues.conf", queueFile);
-  await ensureInclude(server, "extensions.conf", dialplanFile);
-
-  await reloadAsteriskModule(server, "app_queue.so");
-  await reloadAsteriskModule(server, "pbx_config");
+  const client = await openSSH(server);
+  try {
+    await writeFileSSH(client, `${configDir}/${queueFile}`, generateQueueConfig(queue));
+    await writeFileSSH(client, `${configDir}/${dialplanFile}`, generateQueueDialplan(queue));
+    await ensureIncludeSSH(client, "queues.conf", queueFile);
+    await ensureIncludeSSH(client, "extensions.conf", dialplanFile);
+    await reloadModule(server, client, "app_queue.so");
+    await reloadModule(server, client, "pbx_config");
+  } finally {
+    client.end();
+  }
 
   log(`Fila ${queue.name} provisionada no servidor ${server.name}`);
 }
@@ -388,11 +439,15 @@ export async function removeQueue(server: ServerType, queue: Queue): Promise<voi
   const queueFile = `queue_${queue.name.replace(/[^a-zA-Z0-9_-]/g, "_")}.conf`;
   const dialplanFile = `extensions_queue_${queue.name.replace(/[^a-zA-Z0-9_-]/g, "_")}.conf`;
 
-  await removeAsteriskFile(server, `${configDir}/${queueFile}`);
-  await removeAsteriskFile(server, `${configDir}/${dialplanFile}`);
-
-  await reloadAsteriskModule(server, "app_queue.so");
-  await reloadAsteriskModule(server, "pbx_config");
+  const client = await openSSH(server);
+  try {
+    await removeFileSSH(client, `${configDir}/${queueFile}`);
+    await removeFileSSH(client, `${configDir}/${dialplanFile}`);
+    await reloadModule(server, client, "app_queue.so");
+    await reloadModule(server, client, "pbx_config");
+  } finally {
+    client.end();
+  }
 
   log(`Fila ${queue.name} removida do servidor ${server.name}`);
 }
@@ -448,9 +503,14 @@ export async function provisionIvrMenu(server: ServerType, ivr: IvrMenu): Promis
   const configDir = "/etc/asterisk";
   const fileName = `extensions_ivr_${ivr.name.replace(/[^a-zA-Z0-9_-]/g, "_")}.conf`;
 
-  await writeAsteriskFile(server, `${configDir}/${fileName}`, generateIVRDialplan(ivr));
-  await ensureInclude(server, "extensions.conf", fileName);
-  await reloadAsteriskModule(server, "pbx_config");
+  const client = await openSSH(server);
+  try {
+    await writeFileSSH(client, `${configDir}/${fileName}`, generateIVRDialplan(ivr));
+    await ensureIncludeSSH(client, "extensions.conf", fileName);
+    await reloadModule(server, client, "pbx_config");
+  } finally {
+    client.end();
+  }
 
   log(`IVR ${ivr.name} provisionado no servidor ${server.name}`);
 }
@@ -459,8 +519,13 @@ export async function removeIvrMenu(server: ServerType, ivr: IvrMenu): Promise<v
   const configDir = "/etc/asterisk";
   const fileName = `extensions_ivr_${ivr.name.replace(/[^a-zA-Z0-9_-]/g, "_")}.conf`;
 
-  await removeAsteriskFile(server, `${configDir}/${fileName}`);
-  await reloadAsteriskModule(server, "pbx_config");
+  const client = await openSSH(server);
+  try {
+    await removeFileSSH(client, `${configDir}/${fileName}`);
+    await reloadModule(server, client, "pbx_config");
+  } finally {
+    client.end();
+  }
 
   log(`IVR ${ivr.name} removido do servidor ${server.name}`);
 }
@@ -519,14 +584,17 @@ export async function provisionConferenceRoom(server: ServerType, room: Conferen
   const confFile = `confbridge_room_${room.roomNumber}.conf`;
   const dialplanFile = `extensions_confbridge_${room.roomNumber}.conf`;
 
-  await writeAsteriskFile(server, `${configDir}/${confFile}`, generateConfBridgeConfig(room));
-  await writeAsteriskFile(server, `${configDir}/${dialplanFile}`, generateConfBridgeDialplan(room));
-
-  await ensureInclude(server, "confbridge.conf", confFile);
-  await ensureInclude(server, "extensions.conf", dialplanFile);
-
-  await reloadAsteriskModule(server, "app_confbridge.so");
-  await reloadAsteriskModule(server, "pbx_config");
+  const client = await openSSH(server);
+  try {
+    await writeFileSSH(client, `${configDir}/${confFile}`, generateConfBridgeConfig(room));
+    await writeFileSSH(client, `${configDir}/${dialplanFile}`, generateConfBridgeDialplan(room));
+    await ensureIncludeSSH(client, "confbridge.conf", confFile);
+    await ensureIncludeSSH(client, "extensions.conf", dialplanFile);
+    await reloadModule(server, client, "app_confbridge.so");
+    await reloadModule(server, client, "pbx_config");
+  } finally {
+    client.end();
+  }
 
   log(`Conferência ${room.roomNumber} provisionada no servidor ${server.name}`);
 }
@@ -536,11 +604,15 @@ export async function removeConferenceRoom(server: ServerType, room: ConferenceR
   const confFile = `confbridge_room_${room.roomNumber}.conf`;
   const dialplanFile = `extensions_confbridge_${room.roomNumber}.conf`;
 
-  await removeAsteriskFile(server, `${configDir}/${confFile}`);
-  await removeAsteriskFile(server, `${configDir}/${dialplanFile}`);
-
-  await reloadAsteriskModule(server, "app_confbridge.so");
-  await reloadAsteriskModule(server, "pbx_config");
+  const client = await openSSH(server);
+  try {
+    await removeFileSSH(client, `${configDir}/${confFile}`);
+    await removeFileSSH(client, `${configDir}/${dialplanFile}`);
+    await reloadModule(server, client, "app_confbridge.so");
+    await reloadModule(server, client, "pbx_config");
+  } finally {
+    client.end();
+  }
 
   log(`Conferência ${room.roomNumber} removida do servidor ${server.name}`);
 }
@@ -583,13 +655,13 @@ function generateDIDDialplan(did: Did): string {
 
 function getDialplanDestination(destType: string, destValue: string): string {
   switch (destType) {
-    case "extension": return `Dial(SIP/${destValue},30)`;
+    case "extension": return `Dial(PJSIP/${destValue},30)`;
     case "queue": return `Queue(${destValue})`;
     case "ivr": return `Goto(ivr-${destValue},s,1)`;
     case "voicemail": return `VoiceMail(${destValue}@default)`;
-    case "external": return `Dial(SIP/trunk/${destValue},60)`;
+    case "external": return `Dial(PJSIP/trunk/${destValue},60)`;
     case "conference": return `ConfBridge(${destValue})`;
-    default: return `Dial(SIP/${destValue},30)`;
+    default: return `Dial(PJSIP/${destValue},30)`;
   }
 }
 
@@ -597,9 +669,14 @@ export async function provisionDid(server: ServerType, did: Did): Promise<void> 
   const configDir = "/etc/asterisk";
   const fileName = `extensions_did_${did.number.replace(/[^a-zA-Z0-9_-]/g, "_")}.conf`;
 
-  await writeAsteriskFile(server, `${configDir}/${fileName}`, generateDIDDialplan(did));
-  await ensureInclude(server, "extensions.conf", fileName);
-  await reloadAsteriskModule(server, "pbx_config");
+  const client = await openSSH(server);
+  try {
+    await writeFileSSH(client, `${configDir}/${fileName}`, generateDIDDialplan(did));
+    await ensureIncludeSSH(client, "extensions.conf", fileName);
+    await reloadModule(server, client, "pbx_config");
+  } finally {
+    client.end();
+  }
 
   log(`DID ${did.number} provisionado no servidor ${server.name}`);
 }
@@ -608,8 +685,13 @@ export async function removeDid(server: ServerType, did: Did): Promise<void> {
   const configDir = "/etc/asterisk";
   const fileName = `extensions_did_${did.number.replace(/[^a-zA-Z0-9_-]/g, "_")}.conf`;
 
-  await removeAsteriskFile(server, `${configDir}/${fileName}`);
-  await reloadAsteriskModule(server, "pbx_config");
+  const client = await openSSH(server);
+  try {
+    await removeFileSSH(client, `${configDir}/${fileName}`);
+    await reloadModule(server, client, "pbx_config");
+  } finally {
+    client.end();
+  }
 
   log(`DID ${did.number} removido do servidor ${server.name}`);
 }
@@ -646,9 +728,15 @@ export async function provisionCallerIdRules(server: ServerType, rules: CallerId
 
   const configDir = "/etc/asterisk";
   const fileName = "extensions_callerid_rules.conf";
-  await writeAsteriskFile(server, `${configDir}/${fileName}`, lines.join("\n"));
-  await ensureInclude(server, "extensions.conf", fileName);
-  await reloadAsteriskModule(server, "pbx_config");
+
+  const client = await openSSH(server);
+  try {
+    await writeFileSSH(client, `${configDir}/${fileName}`, lines.join("\n"));
+    await ensureIncludeSSH(client, "extensions.conf", fileName);
+    await reloadModule(server, client, "pbx_config");
+  } finally {
+    client.end();
+  }
 
   log(`Regras CallerID provisionadas no servidor ${server.name}`);
 }
@@ -677,87 +765,17 @@ export async function provisionSpeedDials(server: ServerType, dials: SpeedDial[]
 
   const configDir = "/etc/asterisk";
   const fileName = "extensions_speeddials.conf";
-  await writeAsteriskFile(server, `${configDir}/${fileName}`, lines.join("\n"));
-  await ensureInclude(server, "extensions.conf", fileName);
-  await reloadAsteriskModule(server, "pbx_config");
+
+  const client = await openSSH(server);
+  try {
+    await writeFileSSH(client, `${configDir}/${fileName}`, lines.join("\n"));
+    await ensureIncludeSSH(client, "extensions.conf", fileName);
+    await reloadModule(server, client, "pbx_config");
+  } finally {
+    client.end();
+  }
 
   log(`Speed Dials provisionados no servidor ${server.name}`);
-}
-
-// ===== HELPER: Ensure #include in main config =====
-
-async function ensureInclude(server: ServerType, mainFile: string, includeFile: string): Promise<void> {
-  const sshConfig = getSSHConfig(server);
-  if (!sshConfig) return;
-
-  const client = await connectSSH(sshConfig);
-  try {
-    const includeLine = `#include "${includeFile}"`;
-    const checkResult = await execSSHCommand(
-      client,
-      `grep -qF '${includeLine}' /etc/asterisk/${mainFile} 2>/dev/null && echo 'FOUND' || echo 'NOT_FOUND'`
-    );
-
-    if (checkResult.stdout.trim() === "NOT_FOUND") {
-      let result = await execSSHCommand(
-        client,
-        `echo '${includeLine}' >> /etc/asterisk/${mainFile}`
-      );
-      if (result.code !== 0) {
-        await execSSHCommand(
-          client,
-          `echo '${includeLine}' | sudo tee -a /etc/asterisk/${mainFile} > /dev/null`
-        );
-      }
-    }
-  } finally {
-    client.end();
-  }
-}
-
-// ===== HELPER: Append/Remove lines from include-style files =====
-
-async function appendToIncludeFile(server: ServerType, filePath: string, identifier: string, content: string): Promise<void> {
-  const sshConfig = getSSHConfig(server);
-  if (!sshConfig) return;
-
-  const client = await connectSSH(sshConfig);
-  try {
-    await removeFromIncludeFileSSH(client, filePath, identifier);
-    const escapedContent = content.replace(/'/g, "'\\''");
-    const line = `; ADMINVOIP:${identifier}\n${escapedContent}\n; END:${identifier}`;
-    let result = await execSSHCommand(client, `echo '${line}' >> ${filePath}`);
-    if (result.code !== 0) {
-      await execSSHCommand(client, `echo '${line}' | sudo tee -a ${filePath} > /dev/null`);
-    }
-  } finally {
-    client.end();
-  }
-}
-
-async function removeFromIncludeFile(server: ServerType, filePath: string, identifier: string): Promise<void> {
-  const sshConfig = getSSHConfig(server);
-  if (!sshConfig) return;
-
-  const client = await connectSSH(sshConfig);
-  try {
-    await removeFromIncludeFileSSH(client, filePath, identifier);
-  } finally {
-    client.end();
-  }
-}
-
-async function removeFromIncludeFileSSH(client: any, filePath: string, identifier: string): Promise<void> {
-  let result = await execSSHCommand(
-    client,
-    `sed -i '/; ADMINVOIP:${identifier}/,/; END:${identifier}/d' ${filePath} 2>/dev/null`
-  );
-  if (result.code !== 0) {
-    await execSSHCommand(
-      client,
-      `sudo sed -i '/; ADMINVOIP:${identifier}/,/; END:${identifier}/d' ${filePath} 2>/dev/null`
-    );
-  }
 }
 
 // ===== COMPARE / IMPORT: Comparar informações do servidor =====

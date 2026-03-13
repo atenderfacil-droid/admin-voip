@@ -60,6 +60,13 @@ import {
 } from "./asterisk-provisioner";
 
 const cdrAbortControllers = new Map<string, AbortController>();
+const cdrBackoffAttempts = new Map<string, number>();
+
+function getCDRBackoffDelay(serverId: string): number {
+  const attempts = cdrBackoffAttempts.get(serverId) || 0;
+  const delays = [15000, 30000, 60000, 120000, 300000];
+  return delays[Math.min(attempts, delays.length - 1)];
+}
 
 function startCDRListener(server: ServerType) {
   if (cdrAbortControllers.has(server.id)) {
@@ -93,6 +100,7 @@ function startCDRListener(server: ServerType) {
   cdrAbortControllers.set(server.id, controller);
 
   ami.listenForCDR(async (cdr) => {
+    cdrBackoffAttempts.set(server.id, 0);
     try {
       const parseTime = (t: string) => {
         if (!t || t === "") return null;
@@ -131,14 +139,17 @@ function startCDRListener(server: ServerType) {
   }, controller.signal).catch((err) => {
     log(`CDR listener desconectado [${server.name}]: ${err.message}`);
     cdrAbortControllers.delete(server.id);
+    const attempts = (cdrBackoffAttempts.get(server.id) || 0) + 1;
+    cdrBackoffAttempts.set(server.id, attempts);
+    const delay = getCDRBackoffDelay(server.id);
+    log(`CDR reconnect [${server.name}] tentativa ${attempts}, aguardando ${delay / 1000}s`);
     setTimeout(() => {
       storage.getServer(server.id).then((s) => {
         if (s && s.amiEnabled && s.status === "online") {
-          log(`Reconectando CDR listener [${server.name}]...`);
           startCDRListener(s);
         }
       }).catch(() => {});
-    }, 30000);
+    }, delay);
   });
 
   log(`CDR listener iniciado para servidor: ${server.name}`);
@@ -1037,9 +1048,9 @@ export async function registerRoutes(
               ami.getPJSIPEndpoints().catch(() => []),
             ]);
 
-            const sipDetailPromises = sipPeers.map(async (peer) => {
+            for (const peer of sipPeers) {
               const name = peer.objectname;
-              if (!name) return;
+              if (!name) continue;
               const rawStatus = peer.status || "Unknown";
               const statusLower = rawStatus.toLowerCase();
               let normalizedStatus = "inactive";
@@ -1059,48 +1070,44 @@ export async function registerRoutes(
                 normalizedStatus = "inactive";
               }
 
-              let userAgent = "-";
-              try {
-                const { response } = await ami.executeAction(
-                  { Action: "SIPshowpeer", Peer: name },
-                  false
-                );
-                if (response) {
-                  userAgent = (response as any).sip_useragent || (response as any).useragent || (response as any).SIP_Useragent || "-";
-                  if (userAgent === "-") {
-                    const rawResp = response as Record<string, string>;
-                    for (const key of Object.keys(rawResp)) {
-                      if (key.toLowerCase().includes("useragent")) {
-                        userAgent = rawResp[key];
-                        break;
-                      }
-                    }
-                  }
-                }
-              } catch {}
-
               const ipAddr = peer.ipaddress || "-";
               const port = peer.ipport || "5060";
 
               liveStatus[`${server.id}:${name}`] = {
                 status: normalizedStatus,
-                ipAddress: ipAddr !== "-" && !ipAddr.includes(":") ? ipAddr : ipAddr,
+                ipAddress: ipAddr,
                 port: port,
                 latency,
-                userAgent,
+                userAgent: "-",
                 protocol: "SIP",
                 activeChannels: "0",
                 rawStatus,
                 serverId: server.id,
                 serverName: server.name,
               };
-            });
+            }
 
-            await Promise.all(sipDetailPromises);
+            let pjsipContacts: Record<string, { uri: string; userAgent: string }> = {};
+            try {
+              const { events: contactEvents } = await ami.executeAction(
+                { Action: "PJSIPShowContacts" },
+                true,
+                "ContactListComplete"
+              );
+              for (const ce of contactEvents) {
+                if ((ce.event === "ContactList" || ce.event === "contactlist") && ce.endpoint) {
+                  const ua = ce.useragent || ce.user_agent || "-";
+                  const uri = ce.uri || ce.via_addr || "";
+                  if (!pjsipContacts[ce.endpoint] || ce.status === "Reachable") {
+                    pjsipContacts[ce.endpoint] = { uri, userAgent: ua === "-" ? "-" : ua };
+                  }
+                }
+              }
+            } catch {}
 
-            const pjsipDetailPromises = pjsipEndpoints.map(async (ep) => {
+            for (const ep of pjsipEndpoints) {
               const name = ep.objectname;
-              if (!name) return;
+              if (!name) continue;
               const deviceState = (ep.devicestate || "").toLowerCase();
               let normalizedStatus = "inactive";
               if (deviceState.includes("ringing") || deviceState.includes("busy") || (deviceState.includes("in use") && !deviceState.includes("not in use") && !deviceState.includes("not_inuse"))) {
@@ -1114,37 +1121,20 @@ export async function registerRoutes(
               let ipAddress = "-";
               let port = "5060";
               let userAgent = "-";
-              try {
-                const { events } = await ami.executeAction(
-                  { Action: "PJSIPShowEndpoint", Endpoint: name },
-                  true,
-                  "EndpointDetailComplete"
-                );
-                const contactEvents = events.filter((e: any) =>
-                  (e.event === "ContactStatusDetail" || e.event === "contactstatusdetail") && e.status === "Reachable"
-                );
-                if (contactEvents.length > 0) {
-                  const contact = contactEvents[0] as any;
-                  const uri = contact.uri || contact.aor || "";
-                  const uriMatch = uri.match(/@([\d.]+):(\d+)/);
-                  if (uriMatch) {
-                    ipAddress = uriMatch[1];
-                    port = uriMatch[2];
-                  } else {
-                    const ipMatch = uri.match(/@([\d.]+)/);
-                    if (ipMatch) ipAddress = ipMatch[1];
-                  }
-                  userAgent = contact.useragent || contact.user_agent || "-";
-                  if (userAgent === "-") {
-                    for (const key of Object.keys(contact)) {
-                      if (key.toLowerCase().includes("useragent") || key.toLowerCase() === "user_agent") {
-                        userAgent = contact[key];
-                        break;
-                      }
-                    }
-                  }
+
+              const contactInfo = pjsipContacts[name];
+              if (contactInfo) {
+                const uri = contactInfo.uri;
+                const uriMatch = uri.match(/@([\d.]+):(\d+)/);
+                if (uriMatch) {
+                  ipAddress = uriMatch[1];
+                  port = uriMatch[2];
+                } else {
+                  const ipMatch = uri.match(/@([\d.]+)/);
+                  if (ipMatch) ipAddress = ipMatch[1];
                 }
-              } catch {}
+                userAgent = contactInfo.userAgent;
+              }
 
               liveStatus[`${server.id}:${name}`] = {
                 status: normalizedStatus,
@@ -1158,9 +1148,7 @@ export async function registerRoutes(
                 serverId: server.id,
                 serverName: server.name,
               };
-            });
-
-            await Promise.all(pjsipDetailPromises);
+            }
           } catch (err) {
             // Server unreachable, skip
           }
