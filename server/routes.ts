@@ -836,10 +836,35 @@ export async function registerRoutes(
     }
     try {
       const { ami, server } = await getAMIClient(req.params.id as string, req);
-      const [sipPeers, pjsipEndpoints] = await Promise.all([
-        ami.getSIPPeers().catch(() => []),
-        ami.getPJSIPEndpoints().catch(() => []),
+
+      let sipPeers: any[] = [];
+      let pjsipEndpoints: any[] = [];
+      let sipError: string | null = null;
+      let pjsipError: string | null = null;
+
+      const [sipResult, pjsipResult] = await Promise.allSettled([
+        ami.getSIPPeers(),
+        ami.getPJSIPEndpoints(),
       ]);
+
+      if (sipResult.status === "fulfilled") {
+        sipPeers = sipResult.value;
+      } else {
+        sipError = sipResult.reason?.message || "Falha ao obter peers SIP";
+      }
+
+      if (pjsipResult.status === "fulfilled") {
+        pjsipEndpoints = pjsipResult.value;
+      } else {
+        pjsipError = pjsipResult.reason?.message || "Falha ao obter endpoints PJSIP";
+      }
+
+      if (sipPeers.length === 0 && pjsipEndpoints.length === 0 && (sipError || pjsipError)) {
+        const errors = [sipError, pjsipError].filter(Boolean).join("; ");
+        return res.status(400).json({
+          message: `Não foi possível obter ramais do servidor via AMI: ${errors}. Verifique se o Asterisk está rodando e o AMI está acessível.`,
+        });
+      }
 
       const existingExtensions = await storage.getExtensionsByServer(req.params.id as string);
       const existingNumbers = new Set(existingExtensions.map((e) => e.number));
