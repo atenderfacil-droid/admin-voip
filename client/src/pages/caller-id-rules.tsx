@@ -130,9 +130,7 @@ export default function CallerIdRules() {
       setOpen(false);
       form.reset();
       toast({
-        title: data.provisioned ? "Regra criada e aplicada no servidor" : "Regra criada no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Regra criada com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -158,9 +156,7 @@ export default function CallerIdRules() {
       setEditing(null);
       form.reset();
       toast({
-        title: data.provisioned ? "Regra atualizada e aplicada no servidor" : "Regra atualizada no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Regra atualizada com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -176,9 +172,7 @@ export default function CallerIdRules() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/caller-id-rules"] });
       toast({
-        title: data.provisioned ? "Regra removida e aplicada no servidor" : "Regra removida do banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Regra removida com sucesso",
       });
     },
     onError: (error: Error) => {

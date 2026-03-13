@@ -145,9 +145,7 @@ export default function ConferenceRooms() {
       setOpen(false);
       form.reset();
       toast({
-        title: data.provisioned ? "Sala criada e aplicada no servidor" : "Sala criada no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Sala criada com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -167,9 +165,7 @@ export default function ConferenceRooms() {
       setEditing(null);
       form.reset();
       toast({
-        title: data.provisioned ? "Sala atualizada e aplicada no servidor" : "Sala atualizada no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Sala atualizada com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -186,9 +182,7 @@ export default function ConferenceRooms() {
       queryClient.invalidateQueries({ queryKey: ["/api/conference-rooms"] });
       setDeleteTarget(null);
       toast({
-        title: data.provisioned ? "Sala removida e aplicada no servidor" : "Sala removida do banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Sala removida com sucesso",
       });
     },
     onError: (error: Error) => {

@@ -98,9 +98,7 @@ export default function SipTrunks() {
       setOpen(false);
       form.reset();
       toast({
-        title: data.provisioned ? "Tronco SIP criado e aplicado no servidor" : "Tronco SIP criado no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Tronco SIP criado com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -120,9 +118,7 @@ export default function SipTrunks() {
       setEditing(null);
       form.reset();
       toast({
-        title: data.provisioned ? "Tronco SIP atualizado e aplicado no servidor" : "Tronco SIP atualizado no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Tronco SIP atualizado com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -138,9 +134,7 @@ export default function SipTrunks() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/sip-trunks"] });
       toast({
-        title: data.provisioned ? "Tronco SIP removido e aplicado no servidor" : "Tronco SIP removido do banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Tronco SIP removido com sucesso",
       });
     },
     onError: (error: Error) => {

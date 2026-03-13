@@ -131,9 +131,7 @@ export default function SpeedDials() {
       setOpen(false);
       form.reset();
       toast({
-        title: data.provisioned ? "Speed Dial criado e aplicado no servidor" : "Speed Dial criado no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Speed Dial criado com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -158,9 +156,7 @@ export default function SpeedDials() {
       setEditing(null);
       form.reset();
       toast({
-        title: data.provisioned ? "Speed Dial atualizado e aplicado no servidor" : "Speed Dial atualizado no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Speed Dial atualizado com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -177,9 +173,7 @@ export default function SpeedDials() {
       queryClient.invalidateQueries({ queryKey: ["/api/speed-dials"] });
       setDeleteTarget(null);
       toast({
-        title: data.provisioned ? "Speed Dial removido e aplicado no servidor" : "Speed Dial removido do banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Speed Dial removido com sucesso",
       });
     },
     onError: (error: Error) => {

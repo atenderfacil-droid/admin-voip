@@ -139,9 +139,7 @@ export default function Dids() {
       setOpen(false);
       form.reset();
       toast({
-        title: data.provisioned ? "DID criado e aplicado no servidor" : "DID criado no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "DID criado com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -170,9 +168,7 @@ export default function Dids() {
       setEditing(null);
       form.reset();
       toast({
-        title: data.provisioned ? "DID atualizado e aplicado no servidor" : "DID atualizado no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "DID atualizado com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -188,9 +184,7 @@ export default function Dids() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/dids"] });
       toast({
-        title: data.provisioned ? "DID removido e aplicado no servidor" : "DID removido do banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "DID removido com sucesso",
       });
     },
     onError: (error: Error) => {

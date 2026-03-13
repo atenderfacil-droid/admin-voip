@@ -127,9 +127,7 @@ export default function Queues() {
       setOpen(false);
       form.reset();
       toast({
-        title: data.provisioned ? "Fila criada e aplicada no servidor" : "Fila criada no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Fila criada com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -149,9 +147,7 @@ export default function Queues() {
       setEditing(null);
       form.reset();
       toast({
-        title: data.provisioned ? "Fila atualizada e aplicada no servidor" : "Fila atualizada no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Fila atualizada com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -167,9 +163,7 @@ export default function Queues() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/queues"] });
       toast({
-        title: data.provisioned ? "Fila removida e aplicada no servidor" : "Fila removida do banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Fila removida com sucesso",
       });
     },
     onError: (error: Error) => {

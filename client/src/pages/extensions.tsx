@@ -233,9 +233,7 @@ export default function Extensions() {
       form.reset();
       setDuplicateWarning(null);
       toast({
-        title: data.provisioned ? "Ramal criado e aplicado no servidor" : "Ramal criado no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Ramal criado com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -255,9 +253,7 @@ export default function Extensions() {
       setEditing(null);
       form.reset();
       toast({
-        title: data.provisioned ? "Ramal atualizado e aplicado no servidor" : "Ramal atualizado no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Ramal atualizado com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -273,9 +269,7 @@ export default function Extensions() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/extensions"] });
       toast({
-        title: data.provisioned ? "Ramal removido e aplicado no servidor" : "Ramal removido do banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Ramal removido com sucesso",
       });
     },
     onError: (error: Error) => {

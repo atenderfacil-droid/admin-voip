@@ -96,9 +96,7 @@ export default function IVR() {
       form.reset();
       setIvrOptions([]);
       toast({
-        title: data.provisioned ? "Menu IVR criado e aplicado no servidor" : "Menu IVR criado no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Menu IVR criado com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -119,9 +117,7 @@ export default function IVR() {
       form.reset();
       setIvrOptions([]);
       toast({
-        title: data.provisioned ? "Menu IVR atualizado e aplicado no servidor" : "Menu IVR atualizado no banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Menu IVR atualizado com sucesso",
       });
     },
     onError: (error: Error) => {
@@ -137,9 +133,7 @@ export default function IVR() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/ivr-menus"] });
       toast({
-        title: data.provisioned ? "Menu IVR removido e aplicado no servidor" : "Menu IVR removido do banco de dados",
-        description: data.provisioned ? undefined : data.provisioningMessage,
-        variant: data.provisioned ? "default" : "destructive",
+        title: "Menu IVR removido com sucesso",
       });
     },
     onError: (error: Error) => {

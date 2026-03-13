@@ -124,15 +124,6 @@ async function reloadModuleSSH(client: any, module: string): Promise<void> {
 }
 
 async function reloadModule(server: ServerType, client: any, module: string): Promise<void> {
-  const ami = getAMIClient(server);
-  if (ami) {
-    try {
-      await ami.reload(module);
-      return;
-    } catch (err: any) {
-      log(`AMI reload falhou para ${module}, tentando via SSH: ${err.message}`);
-    }
-  }
   await reloadModuleSSH(client, module);
 }
 

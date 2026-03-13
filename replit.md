@@ -89,10 +89,10 @@ shared/
   - SHA-256 and SHA-512/256 authentication digest support
   - MixMonitor stereo recording option
   - Mass hangup with regex/glob pattern matching
-- **Provisioning Síncrono com Feedback**: Todas as operações CRUD (criar/editar/excluir) em extensões, troncos SIP, IVR, filas, conference rooms, DIDs, CallerID rules e speed dials agora aguardam o resultado do provisionamento e retornam feedback no toast:
-  - Se SSH habilitado e provisionamento sucesso: toast verde "X criado/atualizado/removido e aplicado no servidor"
-  - Se SSH não habilitado ou falha: toast vermelho "X criado/atualizado/removido no banco de dados" com mensagem descritiva
-  - Backend usa helper `tryProvision()` em routes.ts que retorna `{ provisioned: boolean, provisioningMessage: string }`
+- **Provisioning Assíncrono (Fire-and-Forget)**: Todas as operações CRUD (criar/editar/excluir) em extensões, troncos SIP, IVR, filas, conference rooms, DIDs, CallerID rules e speed dials salvam no banco e respondem imediatamente ao browser. O provisionamento SSH roda em background sem bloquear a UI.
+  - Backend usa `fireAndForgetProvision()` em routes.ts — responde HTTP instantaneamente, provisiona em background
+  - `reloadModule()` usa apenas SSH (sem criar conexão AMI extra)
+  - Frontend toasts simplificados: sempre "X criado/atualizado/removido com sucesso"
 - SIP extension management with voicemail and call recording
 - SIP trunk configuration for VoIP providers
 - IVR/URA menu builder with multi-level options
