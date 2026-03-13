@@ -1005,11 +1005,22 @@ export async function registerRoutes(
         serverName: string;
       }> = [];
 
+      const ONLINE_CALLS_TIMEOUT_MS = 6000;
       await Promise.all(
         amiServers.map(async (server) => {
           try {
-            const { ami } = await getAMIClient(server.id, req);
-            const channels = await ami.getActiveChannels();
+            const { ami } = await Promise.race([
+              getAMIClient(server.id, req),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error("AMI timeout")), ONLINE_CALLS_TIMEOUT_MS)
+              ),
+            ]);
+            const channels = await Promise.race([
+              ami.getActiveChannels(),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error("channels timeout")), ONLINE_CALLS_TIMEOUT_MS)
+              ),
+            ]);
             for (const ch of channels) {
               calls.push({
                 channel: ch.channel,
@@ -1060,13 +1071,25 @@ export async function registerRoutes(
         serverName: string;
       }> = {};
 
+      const LIVE_STATUS_TIMEOUT_MS = 6000;
+
       await Promise.all(
         amiServers.map(async (server) => {
           try {
-            const { ami } = await getAMIClient(server.id, req);
-            const [sipPeers, pjsipEndpoints] = await Promise.all([
-              ami.getSIPPeers().catch(() => []),
-              ami.getPJSIPEndpoints().catch(() => []),
+            const { ami } = await Promise.race([
+              getAMIClient(server.id, req),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error("AMI timeout")), LIVE_STATUS_TIMEOUT_MS)
+              ),
+            ]);
+            const [sipPeers, pjsipEndpoints] = await Promise.race([
+              Promise.all([
+                ami.getSIPPeers().catch(() => []),
+                ami.getPJSIPEndpoints().catch(() => []),
+              ]),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error("AMI query timeout")), LIVE_STATUS_TIMEOUT_MS)
+              ),
             ]);
 
             for (const peer of sipPeers) {
@@ -1110,11 +1133,10 @@ export async function registerRoutes(
 
             let pjsipContacts: Record<string, { uri: string; userAgent: string }> = {};
             try {
-              const { events: contactEvents } = await ami.executeAction(
-                { Action: "PJSIPShowContacts" },
-                true,
-                "ContactListComplete"
-              );
+              const { events: contactEvents } = await Promise.race([
+                ami.executeAction({ Action: "PJSIPShowContacts" }, true, "ContactListComplete"),
+                new Promise<never>((_, reject) => setTimeout(() => reject(new Error("PJSIPShowContacts timeout")), 4000)),
+              ]);
               for (const ce of contactEvents) {
                 if ((ce.event === "ContactList" || ce.event === "contactlist") && ce.endpoint) {
                   const ua = ce.useragent || ce.user_agent || "-";

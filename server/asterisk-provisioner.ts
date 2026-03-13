@@ -162,7 +162,7 @@ function generateSIPExtensionConfig(ext: Extension): string {
 function generatePJSIPExtensionConfig(ext: Extension): string {
   const lines = [
     `; Extension ${ext.number} - ${ext.name}`,
-    `; Gerenciado pelo Admin VOIP - NÃO EDITE MANUALMENTE`,
+    `; Gerenciado pelo Admin VOIP - NAO EDITE MANUALMENTE`,
     ``,
     `[${ext.number}]`,
     `type=endpoint`,
@@ -171,7 +171,7 @@ function generatePJSIPExtensionConfig(ext: Extension): string {
     `allow=${ext.codecs || "alaw,ulaw"}`,
     `transport=transport-udp`,
     `auth=${ext.number}-auth`,
-    `aors=${ext.number}`,
+    `aors=${ext.number}-aor`,
     `callerid="${ext.name}" <${ext.callerId || ext.number}>`,
     `dtmf_mode=${ext.dtmfMode || "rfc2833"}`,
     `direct_media=${ext.directMedia ? "yes" : "no"}`,
@@ -193,9 +193,9 @@ function generatePJSIPExtensionConfig(ext: Extension): string {
   lines.push(`password=${ext.secret}`);
 
   lines.push(``);
-  lines.push(`[${ext.number}]`);
+  lines.push(`[${ext.number}-aor]`);
   lines.push(`type=aor`);
-  lines.push(`max_contacts=1`);
+  lines.push(`max_contacts=5`);
   lines.push(`qualify_frequency=60`);
   lines.push(`remove_existing=yes`);
 
@@ -205,9 +205,12 @@ function generatePJSIPExtensionConfig(ext: Extension): string {
 
 function generateExtensionDialplan(ext: Extension): string {
   const protocol = ext.protocol === "PJSIP" ? "PJSIP" : "SIP";
+  const context = ext.context || "internal";
   const lines = [
-    `; Dialplan para ramal ${ext.number}`,
-    `; Gerenciado pelo Admin VOIP`,
+    `; Dialplan para ramal ${ext.number} - ${ext.name}`,
+    `; Gerenciado pelo Admin VOIP - NAO EDITE MANUALMENTE`,
+    ``,
+    `[${context}]`,
   ];
 
   if (ext.callRecording) {
