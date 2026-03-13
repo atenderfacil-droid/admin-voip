@@ -139,9 +139,9 @@ function startCDRListener(server: ServerType) {
   }, controller.signal).catch((err) => {
     log(`CDR listener desconectado [${server.name}]: ${err.message}`);
     cdrAbortControllers.delete(server.id);
+    const delay = getCDRBackoffDelay(server.id);
     const attempts = (cdrBackoffAttempts.get(server.id) || 0) + 1;
     cdrBackoffAttempts.set(server.id, attempts);
-    const delay = getCDRBackoffDelay(server.id);
     log(`CDR reconnect [${server.name}] tentativa ${attempts}, aguardando ${delay / 1000}s`);
     setTimeout(() => {
       storage.getServer(server.id).then((s) => {

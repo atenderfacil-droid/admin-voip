@@ -64,7 +64,7 @@ export function connectSSH(config: SSHConnectionConfig): Promise<SSHClient> {
       host: config.host,
       port: config.port,
       username: config.username,
-      readyTimeout: 15000,
+      readyTimeout: 8000,
     };
 
     if (config.authMethod === "privatekey" && config.privateKey) {
